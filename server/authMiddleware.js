@@ -1,12 +1,11 @@
 // authMiddleware.js
 const jwt = require('jsonwebtoken');
-const JWT_SECRET = "MY_SUPER_SECRET_KEY_123"; // Trebuie să fie ACEEAȘI cheie ca în server.js
+const JWT_SECRET = "MY_SUPER_SECRET_KEY_123"; 
 
 module.exports = function(req, res, next) {
-    // Luăm token-ul din header-ul 'Authorization'
-    // Formatul va fi: "Bearer TOKEN_LUNG_AICI"
+    // Luam token-ul din header-ul 'Authorization'
     const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1]; // Extragem doar token-ul
+    const token = authHeader && authHeader.split(' ')[1]; 
 
     if (token == null) {
         return res.sendStatus(401); // 401 Unauthorized (Nu ai trimis token)
@@ -17,9 +16,9 @@ module.exports = function(req, res, next) {
             return res.sendStatus(403); // 403 Forbidden (Token invalid/expirat)
         }
 
-        // Dacă totul e OK, atașăm datele utilizatorului la 'request'
-        // Acum, toate rutele protejate vor ști cine este utilizatorul
+        // Dacă totul e OK, atasam datele utilizatorului la 'request'
+        // Acum, toate rutele protejate vor sti cine este utilizatorul
         req.user = user; // user conține { userId, username }
-        next(); // Mergi mai departe la ruta cerută
+        next(); 
     });
 };
