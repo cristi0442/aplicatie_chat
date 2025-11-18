@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
-import './App.css'; // Stilurile
+import './App.css'; 
 import AuthPage from './AuthPage';
 import ConversationList from './ConversationList';
 import OnlineUsers from './OnlineUsers';
@@ -12,11 +12,11 @@ function App() {
     const [onlineUsers, setOnlineUsers] = useState({});
     const [selectedConversationId, setSelectedConversationId] = useState(null);
     const [conversationRefreshKey, setConversationRefreshKey] = useState(0); 
-    const [mesaje, setMesaje] = useState([]); // Starea mesajelor e aici
+    const [mesaje, setMesaje] = useState([]); 
 
-    const socketRef = useRef(null); // Folosim useRef pentru a stoca instanța socket-ului
+    const socketRef = useRef(null); // Folosim useRef pentru a stoca instanta socket-ului
 
-    // Funcția de Login
+    // functia de Login
     const handleLoginSuccess = (loggedInUser, authToken) => {
         setUser(loggedInUser);
         setToken(authToken);
@@ -24,7 +24,7 @@ function App() {
         localStorage.setItem('chat_user', JSON.stringify(loggedInUser));
     };
 
-    // Funcția de Logout
+    // functia de Logout
     const handleLogout = () => {
         if (socketRef.current) {
             socketRef.current.disconnect();
@@ -39,7 +39,7 @@ function App() {
         localStorage.removeItem('chat_user');
     };
 
-    // Verificăm dacă suntem deja logați la încărcarea paginii
+    // aici se verifica daca user-ul este deja logat la incarcarea paginii
     useEffect(() => {
         const storedToken = localStorage.getItem('chat_token');
         const storedUser = localStorage.getItem('chat_user');
@@ -49,75 +49,71 @@ function App() {
         }
     }, []);
 
-    // --- EFECTUL 1: GESTIONAREA CONEXIUNII SOCKET ---
-    // Se rulează doar când userul se loghează sau se deloghează
+    //  EFECTUL 1: GESTIONAREA CONEXIUNII SOCKET 
+    // Se ruleaza doar cand user-ul se logheaza sau se delogheaza
     useEffect(() => {
         if (user && token) {
             // Conectare
             const newSocket = io("http://localhost:3001", {
                  auth: { token: token }
             });
-            socketRef.current = newSocket; // Salvăm instanța în ref
+            socketRef.current = newSocket; // Salvam instanta in ref
 
             newSocket.on('updateOnlineUsers', (users) => {
                 setOnlineUsers(users);
             });
 
-            // Funcția de curățare (cleanup)
+            // functia pentru curatare(cleanup)
             return () => {
                 newSocket.disconnect();
                 socketRef.current = null;
             };
         }
-    }, [user, token]); // Dependențe: user, token
+    }, [user, token]); // Dependente: user, token
 
-    // --- EFECTUL 2: GESTIONAREA ASCULTĂTORULUI DE MESAJE ---
-    // Se re-rulează de fiecare dată când socket-ul se schimbă SAU
-    // când schimbăm conversația activă
+    //  EFECTUL 2: GESTIONAREA ASCULTATORULUI DE MESAJE 
+    // Se re-ruleaza de fiecare data cand socket-ul se schimba SAU
+    // cand schimbam conversatia activa
     useEffect(() => {
-        // Nu face nimic dacă nu avem un socket
+        // Nu face nimic daca nu avem un socket
         if (!socketRef.current) return;
 
-        // Definim funcția de handle
+        // Definim functia de handle
         const handleNewMessage = (mesajPrimit) => {
             if (mesajPrimit.conversatie_id === selectedConversationId) {
-                // Mesaj pentru chat-ul curent
                 setMesaje(anterioare => [...anterioare, mesajPrimit]);
-            } else if (mesajPrimit.expeditor_id !== user.id) {
-                // Notificare (și nu e ecoul propriului nostru mesaj)
-                alert(`Mesaj nou în altă conversație! (de la Utilizator ${mesajPrimit.expeditor_id})`);
+            } else if (mesajPrimit.expeditor_id !== user.id) 
+            {
+                alert(`Mesaj nou in alta conversatie! (de la Utilizator ${mesajPrimit.expeditor_id})`);
             }
         };
         
-        // Pornim ascultătorul
         socketRef.current.on('newMessage', handleNewMessage);
 
-        // Funcția de curățare (cleanup)
-        // Oprește listener-ul vechi înainte de a rula din nou efectul
+       
         return () => {
             socketRef.current.off('newMessage', handleNewMessage);
         };
         
-    // AICI E CHEIA: Acest efect depinde de conversația selectată
-    }, [socketRef.current, selectedConversationId, user?.id]); // Adăugăm user.id pentru siguranță
+    // AICI E CHEIA: Acest efect depinde de conversația selectata
+    }, [socketRef.current, selectedConversationId, user?.id]); //Se adauga user.id pentru siguranta
 
-
-    // Funcție pentru a schimba conversația și a încărca mesajele
+    // Functie pentru a schimba conversatia si a incarca mesajele
     const handleSelectConversation = (convoId) => {
-        setMesaje([]); // Golește mesajele vechi
+        setMesaje([]); // Goleste mesajele vechi
         setSelectedConversationId(convoId);
-        // TODO: Aici vei încărca istoricul mesajelor
+        // TODO: Aici trebuie incarcat istoricul mesajelor 
         // fetch(...)
     };
 
-    // Funcția pentru a porni un chat (logica "find-or-create")
+    // Functia pentru a porni un chat (logica "find-or-create")
     const handleSelectUser = async (otherUserId) => {
         if (!user || !token) return;
 
         const numericOtherUserId = parseInt(otherUserId, 10);
         
         if (numericOtherUserId === user.id) {
-            alert("Nu poți începe un chat cu tine însuți.");
+            alert("Nu poti incepe un chat cu tine insuti.");
             return;
         }
 
@@ -132,12 +128,11 @@ function App() {
             });
 
             if (!response.ok) {
-                throw new Error('Eroare la pornirea conversației');
+                throw new Error('Eroare la pornirea conversatiei');
             }
 
             const data = await response.json(); // data = { conversationId, createdNew }
             
-            // Selectează automat conversația (fie ea nouă sau veche)
             handleSelectConversation(data.conversationId);
 
             if (data.createdNew) {
@@ -149,7 +144,7 @@ function App() {
         }
     };
 
-    // --- RANDAREA ---
+    //  RANDAREA 
 
     if (!user) {
         return <AuthPage onLoginSuccess={handleLoginSuccess} />;
@@ -181,7 +176,7 @@ function App() {
                     socket={socketRef.current} 
                     user={user} 
                     conversationId={selectedConversationId}
-                    mesaje={mesaje} // Trimitem mesajele din starea părintelui
+                    mesaje={mesaje} // Trimitem mesajele din starea parintelui
                 />
             </div>
         </div>
