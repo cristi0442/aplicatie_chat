@@ -2,7 +2,7 @@
 const express = require('express');
 const http = require('http'); // Necesar pentru Socket.io
 const { Server } = require("socket.io");
-const { Pool } = require('pg'); // Clientul PostgreSQL
+const { Pool } = require('pg'); // Clientul
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
