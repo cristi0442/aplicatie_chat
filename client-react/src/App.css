@@ -1,23 +1,18 @@
-/* Stiluri de bază */
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     margin: 0;
     background: #f0f2f5;
-    /* Previne scroll-ul pe body când aplicația ocupă tot ecranul */
     overflow: hidden; 
 }
 
-/* ---------------- */
-/* Layout Principal */
-/* ---------------- */
 .app-layout {
     display: flex;
     height: 100vh;
 }
 
 .sidebar {
-    width: 280px; /* Puțin mai lat */
-    flex-shrink: 0; /* Nu se micșorează */
+    width: 280px; 
+    flex-shrink: 0;
     background: #f7f7f7;
     border-right: 1px solid #ddd;
     display: flex;
@@ -25,15 +20,13 @@ body {
 }
 
 .chat-area {
-    flex-grow: 1; /* Ocupă restul spațiului */
+    flex-grow: 1; 
     display: flex;
     flex-direction: column;
     background: #ffffff;
 }
 
-/* ----------------- */
-/* Bara Laterală (Sidebar) */
-/* ----------------- */
+
 .sidebar-header {
     padding: 15px;
     background: #eaeaea;
@@ -41,7 +34,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    flex-shrink: 0; /* Să nu se micșoreze header-ul */
+    flex-shrink: 0; 
 }
 
 .logout-button {
@@ -81,7 +74,6 @@ body {
     border-radius: 4px;
     margin-bottom: 4px;
     font-size: 15px;
-    /* Oprește textul din a ieși din container */
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -92,14 +84,11 @@ body {
 }
 
 
-/* -------------------------- */
-/* Fereastra de Chat (ChatWindow) */
-/* -------------------------- */
+
 .chat-window {
     display: flex;
     flex-direction: column;
     height: 100%; 
-    /* Previne depășirea ferestrei */
     overflow: hidden;
 }
 
@@ -109,7 +98,7 @@ body {
     font-size: 1.2em;
     border-bottom: 1px solid #eee;
     background: #fcfcfc;
-    flex-shrink: 0; /* Să nu se micșoreze */
+    flex-shrink: 0;
 }
 
 .chat-window-placeholder {
@@ -121,14 +110,12 @@ body {
     color: #888;
 }
 
-/* ------------------- */
-/* Lista de Mesaje */
-/* ------------------- */
+
 #messages {
     list-style-type: none;
     margin: 0;
     padding: 20px;
-    flex-grow: 1; /* Ocupă spațiul disponibil */
+    flex-grow: 1; 
     overflow-y: auto;
     display: flex;
     flex-direction: column;
@@ -146,13 +133,13 @@ body {
 .other-message {
     background: #e4e6eb;
     color: #050505;
-    align-self: flex-start; /* Aliniere la stânga */
+    align-self: flex-start;
 }
 
 .my-message {
     background: #0084ff; 
     color: white;
-    align-self: flex-end; /* Aliniere la dreapta */
+    align-self: flex-end; 
 }
 
 .message-sender {
@@ -164,19 +151,16 @@ body {
 }
 
 .my-message .message-sender {
-    color: white; /* Sau poți ascunde expeditorul pentru mesajele tale */
+    color: white; 
 }
 
 
-/* ------------------- */
-/* Formularul de Trimitere */
-/* ------------------- */
 #form {
     display: flex;
     padding: 10px 20px;
     border-top: 1px solid #ddd;
     background: #f7f7f7;
-    flex-shrink: 0; /* Să nu se micșoreze */
+    flex-shrink: 0; 
 }
 
 #input {
