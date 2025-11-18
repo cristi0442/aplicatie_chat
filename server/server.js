@@ -1,24 +1,22 @@
-// Importă pachetele
 const express = require('express');
-const http = require('http'); // Necesar pentru Socket.io
+const http = require('http'); 
 const { Server } = require("socket.io");
-const { Pool } = require('pg'); // Clientul
+const { Pool } = require('pg'); 
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
-const authMiddleware = require('./authMiddleware'); // Importăm gardianul
+const authMiddleware = require('./authMiddleware'); 
 
-// --- Configurare ---
+//  Configurare 
 const app = express();
-app.use(express.json()); // Permite serverului să citească JSON
-app.use(cors()); // Permite cereri HTTP de la React
+app.use(express.json()); 
+app.use(cors()); 
 const server = http.createServer(app); 
 const io = new Server(server, {
     cors: { origin: "*" }
 });
 
-// --- Configurare Conexiune Neon PostgreSQL ---
-// !!! ASIGURĂ-TE CĂ AI ÎNLOCUIT CU STRING-UL TĂU !!!
+//  Configurare conexiune la Neon PostgreSQL 
 const NEON_CONNECTION_STRING = "postgresql://neondb_owner:npg_Kgoh7rQ2pFWO@ep-soft-paper-ahy8s9hx-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
 
 const pool = new Pool({
@@ -27,16 +25,15 @@ const pool = new Pool({
 });
 
 const PORT = 3001; 
-const JWT_SECRET = "MY_SUPER_SECRET_KEY_123"; // Schimbă asta!
+const JWT_SECRET = "MY_SUPER_SECRET_KEY_123"; 
 
-// --- Rutele de Autentificare (neprotejate) ---
 
-// 1. Rută de ÎNREGISTRARE
+// 1. Ruta de INREGISTRARE
 app.post('/register', async (req, res) => {
     try {
         const { username, password } = req.body;
         if (!username || !password) {
-            return res.status(400).json({ message: "Username și parola sunt obligatorii" });
+            return res.status(400).json({ message: "Username-ul si parola sunt obligatorii" });
         }
         const salt = await bcrypt.genSalt(10);
         const parolaHash = await bcrypt.hash(password, salt);
@@ -51,27 +48,27 @@ app.post('/register', async (req, res) => {
         if (err.code === '23505') {
             return res.status(400).json({ message: "Acest username este deja folosit." });
         }
-        console.error("Eroare la înregistrare:", err);
+        console.error("Eroare la inregistrare:", err);
         res.status(500).json({ message: "Eroare server" });
     }
 });
 
-// 2. Rută de LOGIN
+// 2. Ruta de LOGIN
 app.post('/login', async (req, res) => {
     try {
         const { username, password } = req.body;
         if (!username || !password) {
-            return res.status(400).json({ message: "Username și parola sunt obligatorii" });
+            return res.status(400).json({ message: "Username si parola sunt obligatorii" });
         }
         const query = `SELECT * FROM utilizatori WHERE username = $1`;
         const result = await pool.query(query, [username]);
         const user = result.rows[0];
         if (!user) {
-            return res.status(404).json({ message: "Utilizatorul nu a fost găsit." });
+            return res.status(404).json({ message: "Utilizatorul nu a fost gasit." });
         }
         const match = await bcrypt.compare(password, user.parola_hash);
         if (!match) {
-            return res.status(401).json({ message: "Parolă incorectă." });
+            return res.status(401).json({ message: "Parola incorecta." });
         }
         const token = jwt.sign(
             { userId: user.id, username: user.username },
@@ -89,9 +86,8 @@ app.post('/login', async (req, res) => {
     }
 });
 
-// --- RUTE PROTEJATE (Necesită token) ---
 
-// 3. Rută pentru a lua conversațiile utilizatorului logat
+// 3. Ruta pentru a obtine conversatiile utilizatorului logat
 app.get('/my-conversations', authMiddleware, async (req, res) => {
     try {
         const myUserId = req.user.userId;
@@ -113,22 +109,21 @@ app.get('/my-conversations', authMiddleware, async (req, res) => {
         const result = await pool.query(query, [myUserId]);
         res.status(200).json(result.rows);
     } catch (err) {
-        console.error("Eroare la preluarea conversațiilor:", err);
+        console.error("Eroare la preluarea conversatiilor:", err);
         res.status(500).json({ message: "Eroare server" });
     }
 });
 
-// 4. Rută pentru a porni SAU a GĂSI o conversație (logica "find-or-create")
+// 4. Ruta pentru a porni SAU a GASI o conversatie
 app.post('/conversations/start', authMiddleware, async (req, res) => {
     const { otherUserId } = req.body;
     const myUserId = req.user.userId;
 
     if (!otherUserId) {
-        return res.status(400).json({ message: "ID-ul celuilalt utilizator lipsește" });
+        return res.status(400).json({ message: "ID-ul celuilalt utilizator lipseste" });
     }
 
     try {
-        // PASUL 1: Caută o conversație 1-la-1 existentă
         const findQuery = `
             SELECT conversatie_id FROM participanti p1
             WHERE p1.utilizator_id = $1
@@ -145,31 +140,24 @@ app.post('/conversations/start', authMiddleware, async (req, res) => {
         
         const existingConvo = await pool.query(findQuery, [myUserId, parseInt(otherUserId)]);
 
-        // PASUL 2: Verifică dacă am găsit ceva
         if (existingConvo.rows.length > 0) {
-            // AM GĂSIT un chat existent.
             res.status(200).json({ 
                 conversationId: existingConvo.rows[0].conversatie_id,
                 createdNew: false
             });
         } else {
-            // NU AM GĂSIT. Creăm un chat nou.
             
-            // 1. Creează o nouă conversație
             const newConvoQuery = `INSERT INTO conversatii DEFAULT VALUES RETURNING id`;
             const convoResult = await pool.query(newConvoQuery);
             const newConversationId = convoResult.rows[0].id;
             
-            // 2. Adaugă ambii participanți în DB
             const participantsQuery = `
                 INSERT INTO participanti (utilizator_id, conversatie_id)
                 VALUES ($1, $3), ($2, $3)
             `;
             await pool.query(participantsQuery, [myUserId, parseInt(otherUserId), newConversationId]);
             
-            // 3. Forțăm socket-urile live să se alăture camerei
             try {
-                // Găsește socket-ul creatorului
                 const myUserSocketInfo = onlineUsers[myUserId];
                 if (myUserSocketInfo) {
                     const mySocket = io.sockets.sockets.get(myUserSocketInfo.socketId);
@@ -177,7 +165,6 @@ app.post('/conversations/start', authMiddleware, async (req, res) => {
                         mySocket.join(String(newConversationId));
                     }
                 }
-                // Găsește socket-ul celuilalt utilizator
                 const otherUserSocketInfo = onlineUsers[parseInt(otherUserId)];
                 if (otherUserSocketInfo) {
                     const otherSocket = io.sockets.sockets.get(otherUserSocketInfo.socketId);
@@ -186,7 +173,7 @@ app.post('/conversations/start', authMiddleware, async (req, res) => {
                     }
                 }
             } catch (joinErr) {
-                console.error("Eroare la forțarea alăturării în cameră:", joinErr);
+                console.error("Eroare la fortarea alaturarii în camera:", joinErr);
             }
 
             res.status(201).json({ 
@@ -196,24 +183,24 @@ app.post('/conversations/start', authMiddleware, async (req, res) => {
         }
         
     } catch (err) {
-        console.error("Eroare la pornirea/găsirea conversației:", err);
+        console.error("Eroare la pornirea/gasirea conversatiei:", err);
         res.status(500).json({ message: "Eroare server" });
     }
 });
 
 
-// --- Logica de Bază a Chat-ului (Socket.io) ---
+//  Logica de Baza a Chat-ului (Socket.io) 
 
-// Stocăm și socket.id pentru a-i putea forța în camere
+// Stocam si socket.id pentru a-i putea forta în camere
 const onlineUsers = {}; // Format: { userId: { username: '...', socketId: '...' } }
 
 // Middleware pentru autentificarea Socket.io
 io.use((socket, next) => {
     const token = socket.handshake.auth.token;
-    if (!token) return next(new Error('Autentificare eșuată: Token lipsă'));
+    if (!token) return next(new Error('Autentificare esuata: Token lipsa'));
 
     jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err) return next(new Error('Autentificare eșuată: Token invalid'));
+        if (err) return next(new Error('Autentificare esuata: Token invalid'));
         socket.user = user;
         next();
     });
@@ -224,38 +211,34 @@ io.on('connection', async (socket) => {
     const userInfo = socket.user; 
     console.log(`Utilizator CONECTAT: ${userInfo.username} (Socket ID: ${socket.id})`);
 
-    // 1. Adaugă utilizatorul la lista globală
     onlineUsers[userInfo.userId] = {
         username: userInfo.username,
         socketId: socket.id
     };
 
-    // 2. Trimite lista actualizată (doar username-urile)
     const usernamesList = Object.fromEntries(
         Object.entries(onlineUsers).map(([id, data]) => [id, data.username])
     );
     io.emit('updateOnlineUsers', usernamesList);
 
-    // 3. Alătură utilizatorul la toate camerele sale EXISTENTE
     try {
         const query = 'SELECT conversatie_id FROM participanti WHERE utilizator_id = $1';
         const userConversations = await pool.query(query, [userInfo.userId]);
         
         userConversations.rows.forEach(convo => {
-            socket.join(String(convo.conversatie_id)); // Folosim String() pentru ID-ul camerei
-            console.log(`Utilizatorul ${userInfo.username} s-a alăturat automat camerei ${convo.conversatie_id}`);
+            socket.join(String(convo.conversatie_id));
+            console.log(`Utilizatorul ${userInfo.username} s-a alaturat automat camerei ${convo.conversatie_id}`);
         });
     } catch (err) {
-        console.error("Eroare la alăturarea automată în camere:", err);
+        console.error("Eroare la alaturarea automata în camere:", err);
     }
     
-    // 4. (Opțional) Alăturare manuală la click-ul pe chat
+    
     socket.on('joinRoom', (conversatieId) => {
         socket.join(String(conversatieId));
-        console.log(`Utilizatorul ${userInfo.username} s-a alăturat manual camerei ${conversatieId}`);
+        console.log(`Utilizatorul ${userInfo.username} s-a alaturat manual camerei ${conversatieId}`);
     });
 
-    // 5. Când un client trimite un mesaj
     socket.on('sendMessage', async (data) => {
         try {
             const query = `
@@ -268,7 +251,6 @@ io.on('connection', async (socket) => {
             const result = await pool.query(query, values);
             const mesajSalvat = result.rows[0];
 
-            // Trimite mesajul tuturor din cameră (inclusiv expeditorului)
             io.to(String(data.conversatieId)).emit('newMessage', mesajSalvat);
 
         } catch (err) {
@@ -276,13 +258,11 @@ io.on('connection', async (socket) => {
         }
     });
 
-    // 6. Când se deconectează
     socket.on('disconnect', () => {
         console.log(`Utilizator DECONECTAT: ${userInfo.username}`);
         
         delete onlineUsers[userInfo.userId];
 
-        // Trimite lista actualizată
         const usernamesList = Object.fromEntries(
             Object.entries(onlineUsers).map(([id, data]) => [id, data.username])
         );
@@ -290,7 +270,7 @@ io.on('connection', async (socket) => {
     });
 });
 
-// --- Pornirea Serverului ---
+//  Pornirea Serverului 
 server.listen(PORT, () => {
-    console.log(`Serverul rulează pe http://localhost:${PORT}`);
+    console.log(`Serverul ruleaza pe http://localhost:${PORT}`);
 });
