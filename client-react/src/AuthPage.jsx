@@ -66,8 +66,8 @@ function AuthPage({ onLoginSuccess }) {
             }
 
             if (isLogin) {
-                // Dacă e login, am primit un token si datele utilizatorului
-                // Trimitem datele către componenta parinte (App.jsx)
+                // Daca e login, am primit un token si datele utilizatorului
+                // Trimitem datele catre componenta parinte (App.jsx)
                 onLoginSuccess(data.user, data.token);
             } else {
                 // Daca e register, doar anuntam succesul si comutam pe login
@@ -96,7 +96,7 @@ function AuthPage({ onLoginSuccess }) {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Parolă"
+                placeholder="Parola"
                 style={styles.input}
                 required
             />
