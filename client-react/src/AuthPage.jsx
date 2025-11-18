@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 
-// Stiluri simple adăugate direct aici
 const styles = {
     container: {
         display: 'flex',
@@ -36,7 +35,7 @@ const styles = {
     }
 };
 
-// `onLoginSuccess` este o funcție pe care o primim de la App.jsx
+// `onLoginSuccess` este o functie pe care o primim de la App.jsx
 function AuthPage({ onLoginSuccess }) {
     const [isLogin, setIsLogin] = useState(true); // Modul: Login sau Register
     const [username, setUsername] = useState("");
@@ -45,7 +44,7 @@ function AuthPage({ onLoginSuccess }) {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setError(""); // Resetează eroarea
+        setError(""); // Reseteaza eroarea
 
         const url = isLogin 
             ? "http://localhost:3001/login" 
@@ -67,12 +66,12 @@ function AuthPage({ onLoginSuccess }) {
             }
 
             if (isLogin) {
-                // Dacă e login, am primit un token și datele utilizatorului
-                // Trimitem datele către componenta părinte (App.jsx)
+                // Dacă e login, am primit un token si datele utilizatorului
+                // Trimitem datele către componenta parinte (App.jsx)
                 onLoginSuccess(data.user, data.token);
             } else {
-                // Dacă e register, doar anunțăm succesul și comutăm pe login
-                alert("Înregistrare reușită! Acum te poți loga.");
+                // Daca e register, doar anuntam succesul si comutam pe login
+                alert("Inregistrare reusita! Acum te poti loga.");
                 setIsLogin(true);
             }
 
@@ -83,7 +82,7 @@ function AuthPage({ onLoginSuccess }) {
 
     return (
         <form onSubmit={handleSubmit} style={styles.container}>
-            <h2>{isLogin ? "Login" : "Înregistrare"}</h2>
+            <h2>{isLogin ? "Login" : "Inregistrare"}</h2>
             {error && <p style={{ color: 'red' }}>{error}</p>}
             <input
                 type="text"
@@ -102,14 +101,14 @@ function AuthPage({ onLoginSuccess }) {
                 required
             />
             <button type="submit" style={styles.button}>
-                {isLogin ? "Intră în cont" : "Creează cont"}
+                {isLogin ? "Intra in cont" : "Creeaza cont"}
             </button>
             <button 
                 type="button" 
                 style={styles.toggle} 
                 onClick={() => setIsLogin(!isLogin)}
             >
-                {isLogin ? "Nu ai cont? Înregistrează-te" : "Ai deja cont? Intră în cont"}
+                {isLogin ? "Nu ai cont? Inregistreaza-te" : "Ai deja cont? Intra in cont"}
             </button>
         </form>
     );
