@@ -1,18 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-// Primește 'mesaje' ca prop de la App.jsx
+// Primeste 'mesaje' ca prop de la App.jsx
 function ChatWindow({ socket, user, conversationId, mesaje }) { 
     const [mesajInput, setMesajInput] = useState("");
     const messagesEndRef = useRef(null);
 
-    // Funcție pentru a derula la cel mai recent mesaj
+    // Functie pentru a derula la cel mai recent mesaj
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
 
     // Auto-scroll la mesaje noi
     useEffect(() => {
-        // Acum derulăm de fiecare dată când prop-ul 'mesaje' se schimbă
+        // Acum derulam de fiecare data cand prop-ul 'mesaje' se schimba
         scrollToBottom();
     }, [mesaje]);
 
@@ -21,7 +21,7 @@ function ChatWindow({ socket, user, conversationId, mesaje }) {
         if (mesajInput.trim() && socket && user && conversationId) {
             const dataMesaj = {
                 continut: mesajInput,
-                expeditorId: user.id, // (Serverul va folosi ID-ul din token, dar e bine să-l avem)
+                expeditorId: user.id, 
                 conversatieId: conversationId
             };
             socket.emit('sendMessage', dataMesaj);
@@ -30,12 +30,12 @@ function ChatWindow({ socket, user, conversationId, mesaje }) {
     };
 
     if (!conversationId) {
-        return <div className="chat-window-placeholder">Selectează o conversație pentru a începe.</div>;
+        return <div className="chat-window-placeholder">Selecteaza o conversatie pentru a incepe.</div>;
     }
 
     return (
         <div className="chat-window">
-            <h2>Chat (Conversația {conversationId})</h2>
+            <h2>Chat (Conversatia {conversationId})</h2>
             <ul id="messages">
                 {/* Folosim prop-ul 'mesaje' */}
                 {mesaje.map((msg) => (
@@ -43,7 +43,7 @@ function ChatWindow({ socket, user, conversationId, mesaje }) {
                         key={msg.id} 
                         className={msg.expeditor_id === user.id ? 'my-message' : 'other-message'}
                     >
-                        {/* Afișăm expeditorul doar dacă nu suntem noi */}
+                        {/* Afisam expeditorul doar daca nu suntem noi */}
                         {msg.expeditor_id !== user.id && 
                             <strong className="message-sender">Utilizator {msg.expeditor_id}</strong>
                         }
