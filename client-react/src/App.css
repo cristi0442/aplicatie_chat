@@ -1,0 +1,204 @@
+/* Stiluri de bază */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    margin: 0;
+    background: #f0f2f5;
+    /* Previne scroll-ul pe body când aplicația ocupă tot ecranul */
+    overflow: hidden; 
+}
+
+/* ---------------- */
+/* Layout Principal */
+/* ---------------- */
+.app-layout {
+    display: flex;
+    height: 100vh;
+}
+
+.sidebar {
+    width: 280px; /* Puțin mai lat */
+    flex-shrink: 0; /* Nu se micșorează */
+    background: #f7f7f7;
+    border-right: 1px solid #ddd;
+    display: flex;
+    flex-direction: column;
+}
+
+.chat-area {
+    flex-grow: 1; /* Ocupă restul spațiului */
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+}
+
+/* ----------------- */
+/* Bara Laterală (Sidebar) */
+/* ----------------- */
+.sidebar-header {
+    padding: 15px;
+    background: #eaeaea;
+    border-bottom: 1px solid #ccc;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0; /* Să nu se micșoreze header-ul */
+}
+
+.logout-button {
+    color: #007bff;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 5px;
+}
+.logout-button:hover {
+    text-decoration: underline;
+}
+
+.list-container {
+    padding: 10px 15px;
+    overflow-y: auto;
+    border-bottom: 1px solid #eee;
+}
+
+.list-container h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-size: 16px;
+    color: #333;
+}
+
+.list-container ul {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+}
+
+.list-container li {
+    padding: 10px 8px;
+    cursor: pointer;
+    border-radius: 4px;
+    margin-bottom: 4px;
+    font-size: 15px;
+    /* Oprește textul din a ieși din container */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.list-container li:hover {
+    background: #e9e9e9;
+}
+
+
+/* -------------------------- */
+/* Fereastra de Chat (ChatWindow) */
+/* -------------------------- */
+.chat-window {
+    display: flex;
+    flex-direction: column;
+    height: 100%; 
+    /* Previne depășirea ferestrei */
+    overflow: hidden;
+}
+
+.chat-window h2 {
+    margin: 0;
+    padding: 18px 20px;
+    font-size: 1.2em;
+    border-bottom: 1px solid #eee;
+    background: #fcfcfc;
+    flex-shrink: 0; /* Să nu se micșoreze */
+}
+
+.chat-window-placeholder {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    font-size: 1.2em;
+    color: #888;
+}
+
+/* ------------------- */
+/* Lista de Mesaje */
+/* ------------------- */
+#messages {
+    list-style-type: none;
+    margin: 0;
+    padding: 20px;
+    flex-grow: 1; /* Ocupă spațiul disponibil */
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px; 
+}
+
+#messages li {
+    padding: 10px 15px;
+    border-radius: 18px;
+    max-width: 70%;
+    word-wrap: break-word; 
+    line-height: 1.4;
+}
+
+.other-message {
+    background: #e4e6eb;
+    color: #050505;
+    align-self: flex-start; /* Aliniere la stânga */
+}
+
+.my-message {
+    background: #0084ff; 
+    color: white;
+    align-self: flex-end; /* Aliniere la dreapta */
+}
+
+.message-sender {
+    font-size: 12px; 
+    display: block; 
+    margin-bottom: 2px;
+    color: #555;
+    font-weight: bold;
+}
+
+.my-message .message-sender {
+    color: white; /* Sau poți ascunde expeditorul pentru mesajele tale */
+}
+
+
+/* ------------------- */
+/* Formularul de Trimitere */
+/* ------------------- */
+#form {
+    display: flex;
+    padding: 10px 20px;
+    border-top: 1px solid #ddd;
+    background: #f7f7f7;
+    flex-shrink: 0; /* Să nu se micșoreze */
+}
+
+#input {
+    flex-grow: 1;
+    padding: 12px 15px;
+    border: 1px solid #ccc;
+    border-radius: 24px; 
+    margin-right: 10px;
+    font-size: 16px;
+}
+
+#form button {
+    padding: 12px 20px;
+    background: #0084ff;
+    color: white;
+    border: none;
+    border-radius: 24px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+}
+
+#form button:hover {
+    background: #0073e6;
+}
