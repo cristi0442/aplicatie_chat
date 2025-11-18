@@ -7,7 +7,7 @@ function ConversationList({ token, onSelectConversation, refreshKey }) {
     useEffect(() => {
         const fetchConversations = async () => {
             try {
-                // Apelăm noua rută protejată de pe server
+                // Apelam noua ruta protejata de pe server
                 const response = await fetch("http://localhost:3001/my-conversations", {
                     headers: {
                         // Trimitem token-ul "Bearer" pentru a ne autentifica
@@ -16,7 +16,7 @@ function ConversationList({ token, onSelectConversation, refreshKey }) {
                 });
                 
                 if (!response.ok) {
-                    throw new Error('Eroare la preluarea conversațiilor');
+                    throw new Error('Eroare la preluarea conversatiilor');
                 }
                 const data = await response.json();
                 setConversations(data);
@@ -28,22 +28,20 @@ function ConversationList({ token, onSelectConversation, refreshKey }) {
         if (token) {
             fetchConversations();
         }
-        // `refreshKey` este un "truc" pentru a forța re-încărcarea listei
-        // când `handleSelectUser` creează un chat nou.
+      
     }, [token, refreshKey]); 
 
-    // O funcție simplă pentru a afișa numele chat-ului
+    // functie care afiseaza numele chat-ului
     const getConversationName = (convo) => {
-        if (convo.nume_conversatie) return convo.nume_conversatie; // Pentru grupuri
+        if (convo.nume_conversatie) return convo.nume_conversatie; 
         if (convo.participanti.length === 0) return `Doar tu (ID ${convo.conversatieId})`;
         if (convo.participanti.length === 1) return `Chat cu ${convo.participanti[0].username}`;
-        // Fallback pentru grupuri fără nume
         return convo.participanti.map(p => p.username).join(', ');
     };
 
     return (
         <div className="list-container">
-            <h3>Conversațiile Mele</h3>
+            <h3>Conversatiile Mele</h3>
             {error && <p style={{ color: 'red' }}>{error}</p>}
             <ul>
                 {conversations.map(convo => (
