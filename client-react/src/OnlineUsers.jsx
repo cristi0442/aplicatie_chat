@@ -1,24 +1,23 @@
 import React from 'react';
 
 function OnlineUsers({ onlineUsers, myUserId, onSelectUser }) {
-    // onlineUsers este un obiect de forma { userId: 'username' }
-    // Vrem sa il transformam intr-un array
-    const usersArray = Object.entries(onlineUsers);
+    // Filtreaza utilizatorul curent din listă
+    const filteredUsers = Object.entries(onlineUsers)
+        .filter(([userId, username]) => parseInt(userId, 10) !== myUserId);
 
     return (
-        <div className="list-container">
-            <h3>Utilizatori Online</h3>
+        <div className="list-section">
+            <h3>Utilizatori Online ({filteredUsers.length})</h3>
             <ul>
-                {usersArray.length > 1 ? usersArray.map(([userId, username]) => {
-                    if (parseInt(userId, 10) === myUserId) {
-                        return null; 
-                    }
+                {/* Afiseaza lista filtrata */}
+                {filteredUsers.length > 0 ? filteredUsers.map(([userId, username]) => {
                     return (
                         <li key={userId} onClick={() => onSelectUser(userId)}>
                             {username}
+                            <span style={{color: '#4ecca3', marginLeft: '5px'}}>●</span>
                         </li>
                     );
-                }) : <li>(Doar tu ești online)</li>}
+                }) : <li style={{ color: 'var(--text-secondary)' }}>(Doar tu ești online)</li>}
             </ul>
         </div>
     );

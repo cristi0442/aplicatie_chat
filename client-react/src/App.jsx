@@ -1,150 +1,126 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
-import './App.css'; 
+import './App.css';
 import AuthPage from './AuthPage';
 import ConversationList from './ConversationList';
 import OnlineUsers from './OnlineUsers';
 import ChatWindow from './ChatWindow';
 
 function App() {
-    const [user, setUser] = useState(null); 
+    const [user, setUser] = useState(null);
     const [token, setToken] = useState(null);
     const [onlineUsers, setOnlineUsers] = useState({});
-    const [selectedConversationId, setSelectedConversationId] = useState(null);
-    const [conversationRefreshKey, setConversationRefreshKey] = useState(0); 
-    const [mesaje, setMesaje] = useState([]); 
+    const [selectedConversation, setSelectedConversation] = useState(null);
+    const [conversationRefreshKey, setConversationRefreshKey] = useState(0);
+    const [mesaje, setMesaje] = useState([]);
 
-    const socketRef = useRef(null); // Folosim useRef pentru a stoca instanta socket-ului
+    const socketRef = useRef(null);
 
-    // functia de Login
     const handleLoginSuccess = (loggedInUser, authToken) => {
         setUser(loggedInUser);
         setToken(authToken);
-        localStorage.setItem('chat_token', authToken);
-        localStorage.setItem('chat_user', JSON.stringify(loggedInUser));
     };
 
-    // functia de Logout
     const handleLogout = () => {
-        if (socketRef.current) {
-            socketRef.current.disconnect();
-            socketRef.current = null;
-        }
-        setUser(null);
-        setToken(null);
-        setOnlineUsers({});
-        setSelectedConversationId(null);
-        setMesaje([]);
         localStorage.removeItem('chat_token');
         localStorage.removeItem('chat_user');
+
+        setToken(null);
+        setOnlineUsers({});
+        setSelectedConversation(null);
+        setMesaje([]);
+
+        setUser(null);
     };
 
-    // aici se verifica daca user-ul este deja logat la incarcarea paginii
-    useEffect(() => {
-        const storedToken = localStorage.getItem('chat_token');
-        const storedUser = localStorage.getItem('chat_user');
-        if (storedToken && storedUser) {
-            setUser(JSON.parse(storedUser));
-            setToken(storedToken);
-        }
-    }, []);
-
-    //  EFECTUL 1: GESTIONAREA CONEXIUNII SOCKET 
-    // Se ruleaza doar cand user-ul se logheaza sau se delogheaza
     useEffect(() => {
         if (user && token) {
-            // Conectare
             const newSocket = io("http://localhost:3001", {
-                 auth: { token: token }
+                auth: { token: token }
             });
-            socketRef.current = newSocket; // Salvam instanta in ref
+            socketRef.current = newSocket;
 
             newSocket.on('updateOnlineUsers', (users) => {
                 setOnlineUsers(users);
             });
 
-            // functia pentru curatare(cleanup)
             return () => {
                 newSocket.disconnect();
                 socketRef.current = null;
             };
         }
-    }, [user, token]); // Dependente: user, token
+    }, [user, token]);
 
-    //  EFECTUL 2: GESTIONAREA ASCULTATORULUI DE MESAJE 
-    // Se re-ruleaza de fiecare data cand socket-ul se schimba SAU
-    // cand schimbam conversatia activa
     useEffect(() => {
-        // Nu face nimic daca nu avem un socket
-        if (!socketRef.current) return;
+        const currentSocket = socketRef.current;
 
-        // Definim functia de handle
+        if (!currentSocket) return;
+
         const handleNewMessage = (mesajPrimit) => {
-            if (mesajPrimit.conversatie_id === selectedConversationId) {
-                setMesaje(anterioare => [...anterioare, mesajPrimit]);
-            } else if (mesajPrimit.expeditor_id !== user.id) 
-            {
-                alert(`Mesaj nou in alta conversatie! (de la Utilizator ${mesajPrimit.expeditor_id})`);
+            if (selectedConversation && mesajPrimit.conversatie_id === selectedConversation.conversatieId) {
+                setMesaje(prev => [...prev, mesajPrimit]);
             }
         };
-        
-        socketRef.current.on('newMessage', handleNewMessage);
 
-       
+        currentSocket.on('newMessage', handleNewMessage);
+
         return () => {
-            socketRef.current.off('newMessage', handleNewMessage);
+            // Folosim verificarea optionala (?.) pentru siguranta
+            if (currentSocket) {
+                currentSocket.off('newMessage', handleNewMessage);
+            }
         };
-        
-    // AICI E CHEIA: Acest efect depinde de conversația selectata
-    }, [socketRef.current, selectedConversationId, user?.id]); //Se adauga user.id pentru siguranta
 
-    // Functie pentru a schimba conversatia si a incarca mesajele
-    const handleSelectConversation = (convoId) => {
-        setMesaje([]); // Goleste mesajele vechi
-        setSelectedConversationId(convoId);
-        // TODO: Aici trebuie incarcat istoricul mesajelor 
-        // fetch(...)
-    };
+    }, [selectedConversation, user]);
 
-    // Functia pentru a porni un chat (logica "find-or-create")
-    const handleSelectUser = async (otherUserId) => {
-        if (!user || !token) return;
-
-        const numericOtherUserId = parseInt(otherUserId, 10);
-        
-        if (numericOtherUserId === user.id) {
-            alert("Nu poti incepe un chat cu tine insuti.");
-            return;
-        }
+    //  FETCH ISTORIC MESAJE
+    const handleSelectConversation = async (convo) => {
+        setSelectedConversation(convo);
+        setMesaje([]);
 
         try {
-            const response = await fetch("http://localhost:3001/conversations/start", {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ otherUserId: numericOtherUserId })
+            const response = await fetch(`http://localhost:3001/messages/${convo.conversatieId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
             });
 
-            if (!response.ok) {
-                throw new Error('Eroare la pornirea conversatiei');
-            }
+            if (!response.ok) throw new Error('Fetch failed');
 
-            const data = await response.json(); // data = { conversationId, createdNew }
-            
-            handleSelectConversation(data.conversationId);
+            const istoric = await response.json();
+            setMesaje(istoric);
 
-            if (data.createdNew) {
-                setConversationRefreshKey(key => key + 1);
-            }
-            
         } catch (err) {
-            console.error(err);
+            console.error("Eroare la fetch mesaje:", err);
         }
     };
 
-    //  RANDAREA 
+    //  START / JOIN CONVERSATIE
+    const handleSelectUser = async (otherUserId) => {
+        if (!user || !token) return;
+        const targetId = parseInt(otherUserId, 10);
+        if (targetId === user.id) return alert("Nu poti vorbi cu tine.");
+
+        try {
+            const res = await fetch("http://localhost:3001/conversations/start", {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ otherUserId: targetId })
+            });
+
+            if (!res.ok) throw new Error('Eroare start conversatie');
+            const data = await res.json();
+
+            const newConversation = {
+                conversatieId: data.conversationId,
+                participanti: data.participanti || [],
+                nume_conversatie: null
+            };
+
+            handleSelectConversation(newConversation);
+            if (data.createdNew) setConversationRefreshKey(k => k + 1);
+
+        } catch (err) { console.error(err); }
+    };
+
 
     if (!user) {
         return <AuthPage onLoginSuccess={handleLoginSuccess} />;
@@ -154,29 +130,30 @@ function App() {
         <div className="app-layout">
             <div className="sidebar">
                 <div className="sidebar-header">
-                    <strong>Logat ca: {user.username}</strong>
+                    <strong>{user.username}</strong>
                     <button onClick={handleLogout} className="logout-button">Logout</button>
                 </div>
-                
-                <ConversationList 
-                    token={token} 
+
+                <ConversationList
+                    token={token}
                     onSelectConversation={handleSelectConversation}
                     refreshKey={conversationRefreshKey}
                 />
-                
-                <OnlineUsers 
-                    onlineUsers={onlineUsers} 
+
+                <OnlineUsers
+                    onlineUsers={onlineUsers}
                     myUserId={user.id}
                     onSelectUser={handleSelectUser}
                 />
             </div>
-            
+
             <div className="chat-area">
-                <ChatWindow 
-                    socket={socketRef.current} 
-                    user={user} 
-                    conversationId={selectedConversationId}
-                    mesaje={mesaje} // Trimitem mesajele din starea parintelui
+                {/* Verificam daca avem conversatie selectata pentru a evita erori vizuale */}
+                <ChatWindow
+                    socket={socketRef.current}
+                    user={user}
+                    selectedConversation={selectedConversation}
+                    mesaje={mesaje}
                 />
             </div>
         </div>

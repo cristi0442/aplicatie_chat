@@ -1,41 +1,5 @@
 import React, { useState } from 'react';
 
-const styles = {
-    container: {
-        display: 'flex',
-        flexDirection: 'column',
-        width: '300px',
-        margin: '100px auto',
-        padding: '20px',
-        border: '1px solid #ccc',
-        borderRadius: '8px',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-    },
-    input: {
-        marginBottom: '10px',
-        padding: '8px',
-        fontSize: '16px'
-    },
-    button: {
-        padding: '10px',
-        fontSize: '16px',
-        cursor: 'pointer',
-        backgroundColor: '#007bff',
-        color: 'white',
-        border: 'none',
-        borderRadius: '4px'
-    },
-    toggle: {
-        marginTop: '15px',
-        background: 'none',
-        border: 'none',
-        color: '#007bff',
-        cursor: 'pointer',
-        textDecoration: 'underline'
-    }
-};
-
-// `onLoginSuccess` este o functie pe care o primim de la App.jsx
 function AuthPage({ onLoginSuccess }) {
     const [isLogin, setIsLogin] = useState(true); // Modul: Login sau Register
     const [username, setUsername] = useState("");
@@ -46,10 +10,10 @@ function AuthPage({ onLoginSuccess }) {
         e.preventDefault();
         setError(""); // Reseteaza eroarea
 
-        const url = isLogin 
-            ? "http://localhost:3001/login" 
+        const url = isLogin
+            ? "http://localhost:3001/login"
             : "http://localhost:3001/register";
-        
+
         try {
             const response = await fetch(url, {
                 method: "POST",
@@ -67,7 +31,6 @@ function AuthPage({ onLoginSuccess }) {
 
             if (isLogin) {
                 // Daca e login, am primit un token si datele utilizatorului
-                // Trimitem datele catre componenta parinte (App.jsx)
                 onLoginSuccess(data.user, data.token);
             } else {
                 // Daca e register, doar anuntam succesul si comutam pe login
@@ -81,36 +44,42 @@ function AuthPage({ onLoginSuccess }) {
     };
 
     return (
-        <form onSubmit={handleSubmit} style={styles.container}>
-            <h2>{isLogin ? "Login" : "Inregistrare"}</h2>
-            {error && <p style={{ color: 'red' }}>{error}</p>}
-            <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Username"
-                style={styles.input}
-                required
-            />
-            <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Parola"
-                style={styles.input}
-                required
-            />
-            <button type="submit" style={styles.button}>
-                {isLogin ? "Intra in cont" : "Creeaza cont"}
-            </button>
-            <button 
-                type="button" 
-                style={styles.toggle} 
-                onClick={() => setIsLogin(!isLogin)}
-            >
-                {isLogin ? "Nu ai cont? Inregistreaza-te" : "Ai deja cont? Intra in cont"}
-            </button>
-        </form>
+        <div className="auth-container">
+            {/* Utilizeaza 'auth-card' pentru aspectul de card */}
+            <div className="auth-card">
+                <h2>{isLogin ? "Autentificare" : "Înregistrare"}</h2>
+                {error && <p style={{ color: 'red', marginBottom: '15px' }}>{error}</p>}
+
+                {/* Utilizeaza 'auth-form' pentru layout-ul input-urilor */}
+                <form onSubmit={handleSubmit} className="auth-form">
+                    <input
+                        type="text"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        placeholder="Username"
+                        required
+                    />
+                    <input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Parola"
+                        required
+                    />
+                    <button type="submit">
+                        {isLogin ? "Intră în cont" : "Creează cont"}
+                    </button>
+                </form>
+
+                {/* Utilizeaza 'toggle-text' pentru link-ul de comutare */}
+                <p className="toggle-text">
+                    {isLogin ? "Nu ai cont? " : "Ai deja cont? "}
+                    <span onClick={() => setIsLogin(!isLogin)}>
+                        {isLogin ? "Înregistrează-te aici" : "Loghează-te aici"}
+                    </span>
+                </p>
+            </div>
+        </div>
     );
 }
 
