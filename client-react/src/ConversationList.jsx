@@ -8,7 +8,8 @@ function ConversationList({ token, onSelectConversation, refreshKey }) {
     useEffect(() => {
         const fetchConversations = async () => {
             try {
-                const response = await fetch("http://localhost:3001/my-conversations", {
+                // ACTUALIZARE: Link-ul catre serverul live Render
+                const response = await fetch("https://aplicatie-chat.onrender.com/my-conversations", {
                     headers: {
                         'Authorization': `Bearer ${token}`
                     }

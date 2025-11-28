@@ -35,7 +35,8 @@ function App() {
 
     useEffect(() => {
         if (user && token) {
-            const newSocket = io("http://localhost:3001", {
+            // CONEXIUNE SOCKET.IO LA SERVERUL LIVE
+            const newSocket = io("https://aplicatie-chat.onrender.com", {
                 auth: { token: token }
             });
             socketRef.current = newSocket;
@@ -73,13 +74,13 @@ function App() {
 
     }, [selectedConversation, user]);
 
-    //  FETCH ISTORIC MESAJE
+    //  FETCH ISTORIC MESAJE (ACTUALIZAT CU LINK SERVER LIVE)
     const handleSelectConversation = async (convo) => {
         setSelectedConversation(convo);
         setMesaje([]);
 
         try {
-            const response = await fetch(`http://localhost:3001/messages/${convo.conversatieId}`, {
+            const response = await fetch(`https://aplicatie-chat.onrender.com/messages/${convo.conversatieId}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
@@ -93,14 +94,14 @@ function App() {
         }
     };
 
-    //  START / JOIN CONVERSATIE
+    //  START / JOIN CONVERSATIE (ACTUALIZAT CU LINK SERVER LIVE)
     const handleSelectUser = async (otherUserId) => {
         if (!user || !token) return;
         const targetId = parseInt(otherUserId, 10);
         if (targetId === user.id) return alert("Nu poti vorbi cu tine.");
 
         try {
-            const res = await fetch("http://localhost:3001/conversations/start", {
+            const res = await fetch("https://aplicatie-chat.onrender.com/conversations/start", {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({ otherUserId: targetId })

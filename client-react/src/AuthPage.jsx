@@ -10,9 +10,10 @@ function AuthPage({ onLoginSuccess }) {
         e.preventDefault();
         setError(""); // Reseteaza eroarea
 
+        // ACTUALIZARE: Link-urile catre serverul live Render
         const url = isLogin
-            ? "http://localhost:3001/login"
-            : "http://localhost:3001/register";
+            ? "https://aplicatie-chat.onrender.com/login"
+            : "https://aplicatie-chat.onrender.com/register";
 
         try {
             const response = await fetch(url, {
