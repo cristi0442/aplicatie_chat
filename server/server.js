@@ -22,7 +22,7 @@ const pool = new Pool({
     ssl: { rejectUnauthorized: false }
 });
 
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 const JWT_SECRET = "MY_SUPER_SECRET_KEY_123";
 
 
