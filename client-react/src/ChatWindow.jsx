@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-function ChatWindow({ socket, username, room, token }) {
+function ChatWindow({ socket, username, room, token, baseUrl }) {
   const [currentMessage, setCurrentMessage] = useState("");
   const [messageList, setMessageList] = useState([]);
   const fileInputRef = useRef(null);
@@ -14,18 +14,19 @@ function ChatWindow({ socket, username, room, token }) {
     scrollToBottom();
   }, [messageList]);
 
+  // Functie helper pentru detectia imaginilor
   const isImageMessage = (content) => {
       return typeof content === 'string' && content.startsWith('data:image');
   };
 
+  // Preluare istoric
   useEffect(() => {
     const fetchHistory = async () => {
         if (!room) return;
         try {
-            
-            const url = `https://aplicatie-chat-backend.onrender.com/messages/${room}`;
-            
-            const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+            const response = await fetch(`${baseUrl}/messages/${room}`, { 
+                headers: { 'Authorization': `Bearer ${token}` } 
+            });
             if (response.ok) {
                 const history = await response.json();
                 setMessageList(history);
@@ -33,10 +34,12 @@ function ChatWindow({ socket, username, room, token }) {
         } catch (err) { console.error(err); }
     };
     fetchHistory();
-  }, [room, token]);
+  }, [room, token, baseUrl]);
 
+  // Ascultare mesaje live
   useEffect(() => {
     const handler = (data) => {
+        // Acceptam mesajul doar daca este pentru camera curenta
         if (String(data.room) === String(room)) {
             setMessageList((list) => [...list, data]);
         }

@@ -6,6 +6,9 @@ import ChatWindow from './ChatWindow';
 import ConversationList from './ConversationList';
 import OnlineUsers from './OnlineUsers';
 
+// URL-ul backend-ului tau de pe Render
+const SERVER_URL = "https://aplicatie-chat-backend.onrender.com";
+
 function App() {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
@@ -41,17 +44,18 @@ function App() {
 
   useEffect(() => {
     if (user && token) {
-      const socketUrl = "https://aplicatie-chat-backend.onrender.com";
-
-      const newSocket = io(socketUrl, { auth: { token: token } });
+      // Conectare la Socket.IO pe Render
+      const newSocket = io(SERVER_URL, { auth: { token: token } });
       setSocket(newSocket);
+      
       newSocket.on('updateOnlineUsers', (users) => setOnlineUsers(users));
+      
       return () => { newSocket.disconnect(); setSocket(null); };
     }
   }, [user, token]);
 
   if (!user) {
-    return <AuthPage onLoginSuccess={handleLoginSuccess} />;
+    return <AuthPage onLoginSuccess={handleLoginSuccess} baseUrl={SERVER_URL} />;
   }
 
   return (
@@ -70,6 +74,7 @@ function App() {
           token={token} 
           currentUser={user} 
           joinRoom={setCurrentRoom} 
+          baseUrl={SERVER_URL}
         />
         
         <div className="list-section" style={{ flex: 'none', height: '150px', borderTop: '1px solid var(--border-color)' }}>
@@ -85,10 +90,11 @@ function App() {
             username={user.username} 
             room={currentRoom} 
             token={token}
+            baseUrl={SERVER_URL}
           />
         ) : (
           <div className="chat-window-placeholder">
-            Selecteaza o conversatie sau incepe una noua (+)
+            Selectează o conversație sau începe una nouă (+)
           </div>
         )}
       </div>

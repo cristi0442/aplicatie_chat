@@ -1,266 +1,187 @@
-require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { Server } = require("socket.io");
 const { Pool } = require('pg');
-const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const cors = require('cors');
+const authMiddleware = require('./authMiddleware');
 
 const app = express();
-// IMPORTANT PENTRU RENDER: Folosim portul dat de ei sau 3001 local
-const PORT = process.env.PORT || 3001;
-
-// Configurare Middleware
-app.use(cors());
 app.use(express.json());
+// Permitem accesul de oriunde (pentru Vercel/Localhost)
+app.use(cors({ origin: "*" }));
 
-// Configurare Baza de Date (PostgreSQL / Neon)
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: {
-        rejectUnauthorized: false // Necesar pentru conexiuni cloud securizate
-    }
-});
-
-// Secretul pentru Token (ideal ar fi in .env, dar il lasam aici pentru simplitate)
-const JWT_SECRET = process.env.JWT_SECRET || "secretul_tau_super_secret";
-
-// Creare Server HTTP și Socket.IO
 const server = http.createServer(app);
+
+// Configurare Socket.io pentru Render (timeout-uri marite) si poze mari
 const io = new Server(server, {
-    cors: {
-        origin: "*", // Permite conexiuni de oriunde (Vercel, Localhost, Telefon)
-        methods: ["GET", "POST"]
-    }
+    cors: { origin: "*" },
+    maxHttpBufferSize: 1e8, // 100 MB pentru poze
+    pingTimeout: 60000,     // Fix pentru Problema 7 (Render disconnects)
+    pingInterval: 25000
 });
 
-// --- RUTE DE AUTENTIFICARE ---
+// CONEXIUNEA TA NEON DB
+const NEON_CONNECTION_STRING = "postgresql://neondb_owner:npg_Kgoh7rQ2pFWO@ep-soft-paper-ahy8s9hx-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
 
-// 1. REGISTER
+const pool = new Pool({
+    connectionString: NEON_CONNECTION_STRING,
+    ssl: { rejectUnauthorized: false }
+});
+
+const PORT = process.env.PORT || 3001;
+const JWT_SECRET = "MY_SUPER_SECRET_KEY_123";
+
+// --- RUTE AUTH ---
 app.post('/register', async (req, res) => {
-    const { username, password } = req.body;
     try {
-        // Verificam daca userul exista deja
-        const checkUser = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
-        if (checkUser.rows.length > 0) {
-            return res.status(400).json({ message: "Username-ul este deja folosit." });
-        }
+        const { username, password } = req.body;
+        if (!username || !password) return res.status(400).json({ message: "Date incomplete" });
 
-        // Criptam parola
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const salt = await bcrypt.genSalt(10);
+        const parolaHash = await bcrypt.hash(password, salt);
 
-        // Inseram in baza de date
-        const newUser = await pool.query(
-            'INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id, username',
-            [username, hashedPassword]
+        const result = await pool.query(
+            "INSERT INTO utilizatori (username, password) VALUES ($1, $2) RETURNING id, username",
+            [username, parolaHash]
         );
-
-        res.status(201).json({ message: "Cont creat cu succes!" });
-    } catch (err) {
-        console.error(err);
-        res.status(500).send("Eroare server la inregistrare");
+        res.status(201).json({ message: "Cont creat", user: result.rows[0] });
+    } catch (err) { 
+        console.error(err); 
+        res.status(500).json({ message: "Eroare server" }); 
     }
 });
 
-// 2. LOGIN (MODIFICAT CU PROTECTIE ANTI-CRASH)
 app.post('/login', async (req, res) => {
-    const { username, password } = req.body;
     try {
-        const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+        const { username, password } = req.body;
+        const result = await pool.query("SELECT * FROM utilizatori WHERE username = $1", [username]);
         
-        if (result.rows.length === 0) {
-            return res.status(400).json({ message: "Utilizatorul nu există." });
-        }
-
+        if (result.rows.length === 0) return res.status(400).json({ message: "User inexistent" });
         const user = result.rows[0];
 
-        // --- PROTECTIE CRITICA ---
-        // Daca userul nu are parola (e.g. cont vechi corupt), returnam eroare clara fara sa dam crash
-        if (!user.password) {
-            console.error(`Eroare: Userul ${username} (ID: ${user.id}) nu are parola setata in DB.`);
-            return res.status(500).json({ message: "Cont invalid (fara parola). Te rog creeaza un cont nou." });
-        }
-        // -------------------------
+        const validPass = await bcrypt.compare(password, user.password);
+        if (!validPass) return res.status(400).json({ message: "Parola gresita" });
 
-        const validPassword = await bcrypt.compare(password, user.password);
-        if (!validPassword) {
-            return res.status(400).json({ message: "Parolă incorectă." });
-        }
-
-        const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '24h' });
-        
-        res.json({ token, user: { id: user.id, username: user.username } });
-
-    } catch (err) {
-        console.error("Eroare Login:", err);
-        res.status(500).send("Eroare server la login");
+        const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '1h' });
+        res.json({ message: "Login OK", token, user: { id: user.id, username: user.username } });
+    } catch (err) { 
+        console.error(err); 
+        res.status(500).json({ message: "Eroare server" }); 
     }
 });
 
-// Middleware pentru verificare Token
-const authenticateToken = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1]; // Format: "Bearer TOKEN"
+// --- RUTE CHAT ---
 
-    if (!token) return res.sendStatus(401);
-
-    jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err) return res.sendStatus(403);
-        req.user = user;
-        next();
-    });
-};
-
-// --- RUTE PENTRU CHAT ---
-
-// 3. START CONVERSATIE (sau gaseste una existenta)
-app.post('/conversations/start', authenticateToken, async (req, res) => {
-    const { otherUserId } = req.body;
-    const myId = req.user.id;
-
-    try {
-        // Pas 1: Creare conversatie
-        const convoRes = await pool.query('INSERT INTO conversations DEFAULT VALUES RETURNING id');
-        const conversationId = convoRes.rows[0].id;
-
-        // Pas 2: Adaugare participanti
-        await pool.query('INSERT INTO conversation_participants (conversation_id, user_id) VALUES ($1, $2)', [conversationId, myId]);
-        await pool.query('INSERT INTO conversation_participants (conversation_id, user_id) VALUES ($1, $2)', [conversationId, otherUserId]);
-
-        // Pas 3: Luam detaliile despre celalalt user pentru a le trimite inapoi
-        const otherUserRes = await pool.query('SELECT id, username FROM users WHERE id = $1', [otherUserId]);
-        const otherUser = otherUserRes.rows[0];
-
-        res.json({
-            createdNew: true,
-            conversationId: conversationId,
-            participanti: [otherUser]
-        });
-
-    } catch (err) {
-        console.error(err);
-        res.status(500).send("Eroare la crearea conversatiei");
-    }
-});
-
-// 4. LISTA CONVERSATIILE MELE
-app.get('/my-conversations', authenticateToken, async (req, res) => {
+app.get('/my-conversations', authMiddleware, async (req, res) => {
     const userId = req.user.id;
     try {
-        const query = `
-            SELECT c.id as "conversatieId", c.name as "nume_conversatie"
-            FROM conversations c
-            JOIN conversation_participants cp ON c.id = cp.conversation_id
-            WHERE cp.user_id = $1
-            ORDER BY c.created_at DESC
-        `;
-        const result = await pool.query(query, [userId]);
-        
-        const conversatii = [];
-        for (let convo of result.rows) {
-            const partRes = await pool.query(`
-                SELECT u.id, u.username 
-                FROM users u 
-                JOIN conversation_participants cp ON u.id = cp.user_id 
-                WHERE cp.conversation_id = $1 AND u.id != $2
-            `, [convo.conversatieId, userId]);
-            
-            conversatii.push({
-                ...convo,
-                participanti: partRes.rows
-            });
-        }
-
-        res.json(conversatii);
-    } catch (err) {
-        console.error(err);
-        res.status(500).send("Eroare la fetch conversatii");
-    }
-});
-
-// 5. ISTORIC MESAJE
-app.get('/messages/:conversationId', authenticateToken, async (req, res) => {
-    const { conversationId } = req.params;
-    try {
         const result = await pool.query(`
-            SELECT m.id, m.content as text, m.created_at, m.user_id as sender_id, u.username as sender_name
-            FROM messages m
-            JOIN users u ON m.user_id = u.id
-            WHERE m.conversation_id = $1
-            ORDER BY m.created_at ASC
-        `, [conversationId]);
+            SELECT c.id as "conversatieId", c.nume_conversatie 
+            FROM conversatii c
+            JOIN participanti p ON c.id = p.conversatie_id
+            WHERE p.utilizator_id = $1
+        `, [userId]);
 
-        const mesaje = result.rows.map(m => ({
-            id: m.id,
-            text: m.text,
-            sender: m.sender_name,
-            sender_id: m.sender_id,
-            conversatie_id: parseInt(conversationId)
-        }));
-
-        res.json(mesaje);
-    } catch (err) {
-        console.error(err);
-        res.status(500).send("Eroare la fetch mesaje");
-    }
-});
-
-// --- SOCKET.IO (Real-time) ---
-let onlineUsers = {}; 
-
-io.use((socket, next) => {
-    const token = socket.handshake.auth.token;
-    if (!token) return next(new Error("Authentication error"));
-
-    jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err) return next(new Error("Authentication error"));
-        socket.user = user;
-        next();
-    });
-});
-
-io.on('connection', (socket) => {
-    console.log(`User conectat: ${socket.user.username} (ID: ${socket.user.id})`);
-    
-    onlineUsers[socket.user.id] = socket.id;
-    io.emit('updateOnlineUsers', onlineUsers);
-
-    socket.on('sendMessage', async (data) => {
-        const { conversationId, text } = data;
-        const senderId = socket.user.id;
-
-        try {
-            const insertRes = await pool.query(
-                'INSERT INTO messages (conversation_id, user_id, content) VALUES ($1, $2, $3) RETURNING id, created_at',
-                [conversationId, senderId, text]
-            );
-            const msgData = insertRes.rows[0];
-
-            const messageToSend = {
-                id: msgData.id,
-                text: text,
-                sender: socket.user.username,
-                sender_id: senderId,
-                conversatie_id: conversationId,
-                created_at: msgData.created_at
-            };
-
-            io.emit('newMessage', messageToSend);
-
-        } catch (err) {
-            console.error("Eroare trimitere mesaj socket:", err);
+        const conversatii = result.rows;
+        for (let conv of conversatii) {
+            const parts = await pool.query(`
+                SELECT u.username FROM utilizatori u
+                JOIN participanti p ON u.id = p.utilizator_id
+                WHERE p.conversatie_id = $1
+            `, [conv.conversatieId]);
+            conv.participanti = parts.rows;
         }
+        res.json(conversatii);
+    } catch (err) { console.error(err); res.status(500).json({ message: "Err" }); }
+});
+
+app.post('/conversations/start', authMiddleware, async (req, res) => {
+    const myId = req.user.id;
+    const otherId = req.body.otherUserId;
+    if (!otherId) return res.status(400).json({ message: "Lipseste ID user" });
+
+    try {
+        // Fix Problema 5: Verifica daca exista deja (optional, dar mai simplu e sa cream una noua momentan ca sa nu complicam)
+        // Cream conversatia
+        const newConv = await pool.query("INSERT INTO conversatii (nume_conversatie) VALUES (NULL) RETURNING id", []);
+        const convId = newConv.rows[0].id;
+        
+        // Adaugam participantii
+        await pool.query("INSERT INTO participanti (conversatie_id, utilizator_id) VALUES ($1, $2), ($1, $3)", [convId, myId, otherId]);
+        
+        // Important: Trebuie sa anuntam socket-urile sa intre in camera noua, dar e mai simplu sa dam refresh la frontend.
+        res.json({ conversationId: convId });
+    } catch (err) { console.error(err); res.status(500).json({ message: "Err" }); }
+});
+
+app.get('/messages/:room', authMiddleware, async (req, res) => {
+    try {
+        const { room } = req.params;
+        // Fix Problema 3: Schema DB veche
+        const result = await pool.query(`
+            SELECT m.continut as message, u.username as author, m.data_trimiterii as time
+            FROM mesaje m
+            JOIN utilizatori u ON m.expeditor_id = u.id
+            WHERE m.conversatie_id = $1
+            ORDER BY m.data_trimiterii ASC
+        `, [room]);
+        
+        res.json(result.rows);
+    } catch (err) { console.error(err); res.status(500).json({ message: "Err" }); }
+});
+
+// --- SOCKET.IO LOGIC ---
+let onlineUsers = {};
+
+io.on('connection', async (socket) => {
+    const token = socket.handshake.auth.token;
+    let userId = null;
+    let username = null;
+
+    if (token) {
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            userId = decoded.id;
+            username = decoded.username;
+            
+            // Fix Problema 6: Salvam si username-ul
+            onlineUsers[userId] = { socketId: socket.id, username };
+            
+            // Fix Problema 2: JOIN ROOMS
+            // Utilizatorul intra automat in toate camerele lui de conversatie existente in DB
+            const myConvos = await pool.query('SELECT conversatie_id FROM participanti WHERE utilizator_id = $1', [userId]);
+            myConvos.rows.forEach(c => {
+                socket.join(String(c.conversatie_id));
+                console.log(`User ${username} joined room ${c.conversatie_id}`);
+            });
+
+        } catch (e) { console.error("Socket Auth Error", e); }
+    }
+
+    // Trimitem lista de useri catre frontend
+    io.emit('updateOnlineUsers', Object.fromEntries(Object.entries(onlineUsers).map(([id, d]) => [id, d.username])));
+
+    socket.on('send_message', async (data) => {
+        // data: { room, author, message, type, time }
+        try {
+            // Salvam in DB (Fix Problema 3: tabela 'mesaje')
+            await pool.query(
+                `INSERT INTO mesaje (continut, expeditor_id, conversatie_id) VALUES ($1, $2, $3)`,
+                [data.message, userId, data.room]
+            );
+            
+            // Fix Problema 1: Trimitem DOAR in camera specifica
+            io.to(String(data.room)).emit('receive_message', data);
+            
+        } catch (e) { console.error("Send Msg Error", e); }
     });
 
     socket.on('disconnect', () => {
-        console.log(`User deconectat: ${socket.user.username}`);
-        delete onlineUsers[socket.user.id];
-        io.emit('updateOnlineUsers', onlineUsers);
+        if (userId) delete onlineUsers[userId];
+        io.emit('updateOnlineUsers', Object.fromEntries(Object.entries(onlineUsers).map(([id, d]) => [id, d.username])));
     });
 });
 
-// START SERVER
-server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));

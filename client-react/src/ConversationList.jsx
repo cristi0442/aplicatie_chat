@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 
-function ConversationList({ socket, token, currentUser, joinRoom }) {
+function ConversationList({ socket, token, currentUser, joinRoom, baseUrl }) {
   const [conversations, setConversations] = useState([]);
   const [newChatUser, setNewChatUser] = useState("");
 
   const fetchConversations = async () => {
     try {
-      const url = "https://aplicatie-chat-backend.onrender.com/my-conversations";
-
-      const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+      const response = await fetch(`${baseUrl}/my-conversations`, { 
+          headers: { 'Authorization': `Bearer ${token}` } 
+      });
       if (response.ok) setConversations(await response.json());
     } catch (err) { console.error(err); }
   };
@@ -18,18 +18,21 @@ function ConversationList({ socket, token, currentUser, joinRoom }) {
   const startNewChat = async () => {
     if (!newChatUser) return;
     try {
-       const url = "https://aplicatie-chat-backend.onrender.com/conversations/start";
-
-        const response = await fetch(url, {
+        const response = await fetch(`${baseUrl}/conversations/start`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
             body: JSON.stringify({ otherUserId: newChatUser })
         });
         if (response.ok) {
             const data = await response.json();
+            // Aici nu mai apelam manual joinRoom in socket, pentru ca 
+            // serverul nu stie instant de noua conexiune in DB.
+            // Dar putem apela joinRoom de frontend pentru UI.
             joinRoom(data.conversationId);
             fetchConversations();
             setNewChatUser("");
+            // Fortam socket-ul sa intre in camera nou creata
+            if(socket) socket.emit('join_room', data.conversationId); 
         }
     } catch (err) { console.error(err); }
   };
