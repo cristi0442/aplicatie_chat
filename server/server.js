@@ -184,4 +184,11 @@ io.on('connection', async (socket) => {
     });
 });
 
+<<<<<<< HEAD
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+=======
+// START SERVER
+server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
+>>>>>>> 2a8e47130eac7ac14bb58b3e2d2fdacb7740f55f
