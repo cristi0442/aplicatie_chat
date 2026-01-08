@@ -185,7 +185,3 @@ io.on('connection', async (socket) => {
 });
 
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-// START SERVER
-server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
