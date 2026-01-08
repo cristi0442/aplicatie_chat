@@ -12,10 +12,11 @@ const SERVER_URL = "https://aplicatie-chat-backend.onrender.com";
 function App() {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
-  const [currentRoom, setCurrentRoom] = useState(null);
+  const [currentRoom, setCurrentRoom] = useState(null); // ID-ul conversatiei selectate
   const [socket, setSocket] = useState(null); 
   const [onlineUsers, setOnlineUsers] = useState({});
 
+  // 1. Verificam daca userul este deja logat (in localStorage)
   useEffect(() => {
     const storedUser = localStorage.getItem('chat_user');
     const storedToken = localStorage.getItem('chat_token');
@@ -42,22 +43,33 @@ function App() {
     setCurrentRoom(null);
   };
 
+  // 2. Conectare Socket.IO cand avem user si token
   useEffect(() => {
     if (user && token) {
-      // Conectare la Socket.IO pe Render
-      const newSocket = io(SERVER_URL, { auth: { token: token } });
+      // Conectare la serverul Render
+      const newSocket = io(SERVER_URL, { 
+          auth: { token: token },
+          // Optiuni extra pentru stabilitate pe Render
+          reconnection: true,
+          reconnectionAttempts: 5,
+      });
+
       setSocket(newSocket);
       
+      // Ascultam lista de useri online
       newSocket.on('updateOnlineUsers', (users) => setOnlineUsers(users));
       
+      // Cleanup la delogare
       return () => { newSocket.disconnect(); setSocket(null); };
     }
   }, [user, token]);
 
+  // Daca nu e logat, afisam pagina de Auth
   if (!user) {
     return <AuthPage onLoginSuccess={handleLoginSuccess} baseUrl={SERVER_URL} />;
   }
 
+  // Layout principal
   return (
     <div className="app-layout">
       <div className="sidebar">

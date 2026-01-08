@@ -10,9 +10,12 @@ function AuthPage({ onLoginSuccess, baseUrl }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    
+    // Alegem endpoint-ul in functie de mod (Login sau Register)
     const endpoint = isLogin ? "/login" : "/register";
 
     try {
+      // Folosim baseUrl primit din App.jsx (care pointeaza catre Render)
       const response = await fetch(`${baseUrl}${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -23,17 +26,22 @@ function AuthPage({ onLoginSuccess, baseUrl }) {
 
       if (response.ok) {
         if (isLogin) {
+          // Login cu succes: trimitem datele utilizatorului si token-ul in sus catre App.jsx
           onLoginSuccess(data.user, data.token);
         } else {
-          // După înregistrare, trecem la login automat sau cerem userului să se logheze
+          // Inregistrare cu succes
           alert("Cont creat! Te rugăm să te autentifici.");
-          setIsLogin(true);
+          setIsLogin(true); // Trecem automat pe formularul de login
+          setUsername("");
+          setPassword("");
         }
       } else {
+        // Afisam eroarea venita de la server (ex: "User inexistent", "Parola gresita")
         setError(data.message || "Eroare necunoscută");
       }
     } catch (err) {
-      setError("Eroare de conexiune la server.");
+      console.error(err);
+      setError("Eroare de conexiune la server. Verifică internetul.");
     }
   };
 
@@ -41,7 +49,9 @@ function AuthPage({ onLoginSuccess, baseUrl }) {
     <div className="auth-container">
       <div className="auth-card">
         <h2>{isLogin ? "Autentificare" : "Înregistrare"}</h2>
-        {error && <p style={{ color: 'red' }}>{error}</p>}
+        
+        {error && <p style={{ color: 'red', marginBottom: '10px' }}>{error}</p>}
+        
         <form className="auth-form" onSubmit={handleSubmit}>
           <input
             type="text"
@@ -57,11 +67,17 @@ function AuthPage({ onLoginSuccess, baseUrl }) {
             onChange={(e) => setPassword(e.target.value)}
             required
           />
-          <button type="submit">{isLogin ? "Intră în cont" : "Creează cont"}</button>
+          <button type="submit">
+            {isLogin ? "Intră în cont" : "Creează cont"}
+          </button>
         </form>
+        
         <p className="toggle-text">
           {isLogin ? "Nu ai cont? " : "Ai deja cont? "}
-          <span onClick={() => setIsLogin(!isLogin)}>
+          <span onClick={() => {
+              setIsLogin(!isLogin);
+              setError(""); // Resetam erorile la schimbarea modului
+          }}>
             {isLogin ? "Înregistrează-te" : "Loghează-te"}
           </span>
         </p>

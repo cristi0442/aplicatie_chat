@@ -4,17 +4,25 @@ function ConversationList({ socket, token, currentUser, joinRoom, baseUrl }) {
   const [conversations, setConversations] = useState([]);
   const [newChatUser, setNewChatUser] = useState("");
 
+  // Functie pentru a incarca lista de conversatii
   const fetchConversations = async () => {
     try {
       const response = await fetch(`${baseUrl}/my-conversations`, { 
           headers: { 'Authorization': `Bearer ${token}` } 
       });
-      if (response.ok) setConversations(await response.json());
-    } catch (err) { console.error(err); }
+      if (response.ok) {
+          const data = await response.json();
+          setConversations(data);
+      }
+    } catch (err) { console.error("Eroare la fetch conversatii:", err); }
   };
 
-  useEffect(() => { if (token) fetchConversations(); }, [token]);
+  // Incarcam conversatiile cand componenta se monteaza sau se schimba token-ul
+  useEffect(() => { 
+      if (token) fetchConversations(); 
+  }, [token, baseUrl]);
 
+  // Functie pentru a incepe o conversatie noua
   const startNewChat = async () => {
     if (!newChatUser) return;
     try {
@@ -23,16 +31,23 @@ function ConversationList({ socket, token, currentUser, joinRoom, baseUrl }) {
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
             body: JSON.stringify({ otherUserId: newChatUser })
         });
+
         if (response.ok) {
             const data = await response.json();
-            // Aici nu mai apelam manual joinRoom in socket, pentru ca 
-            // serverul nu stie instant de noua conexiune in DB.
-            // Dar putem apela joinRoom de frontend pentru UI.
-            joinRoom(data.conversationId);
+            
+            // 1. Facem update la lista locala
             fetchConversations();
+            
+            // 2. Selectam automat conversatia noua
+            joinRoom(data.conversationId);
+            
+            // 3. Fortam socket-ul sa intre in camera nou creata (fara refresh)
+            if(socket) socket.emit('join_room', data.conversationId);
+            
+            // 4. Resetam inputul
             setNewChatUser("");
-            // Fortam socket-ul sa intre in camera nou creata
-            if(socket) socket.emit('join_room', data.conversationId); 
+        } else {
+            alert("Nu s-a putut crea conversatia (verifica ID-ul).");
         }
     } catch (err) { console.error(err); }
   };
@@ -41,18 +56,23 @@ function ConversationList({ socket, token, currentUser, joinRoom, baseUrl }) {
     <div className="list-section">
       <div style={{display: 'flex', gap: '5px', marginBottom: '15px'}}>
         <input 
-            type="number" placeholder="ID User..." 
-            value={newChatUser} onChange={(e) => setNewChatUser(e.target.value)}
+            type="number" 
+            placeholder="ID User..." 
+            value={newChatUser} 
+            onChange={(e) => setNewChatUser(e.target.value)}
             style={{width: '100%'}}
         />
-        <button onClick={startNewChat} style={{width: '50px', padding: '0'}}>+</button>
+        <button onClick={startNewChat} className="add-btn" style={{width: '50px', borderRadius: '8px'}}>+</button>
       </div>
 
       <h3>Conversatii</h3>
       <ul>
         {conversations.map((convo) => {
-            const partener = convo.participanti.find(p => p.username !== currentUser.username);
-            const numeAfisat = partener ? partener.username : "Chat";
+            // Logica Veche: Gasim partenerul de discutie (cel care NU sunt eu)
+            // currentUser este pasat din App.jsx
+            const partener = convo.participanti.find(p => p.username !== currentUser?.username);
+            const numeAfisat = partener ? partener.username : "Chat Necunoscut";
+            
             return (
               <li key={convo.conversatieId} onClick={() => joinRoom(convo.conversatieId)}>
                 <strong>{numeAfisat}</strong>

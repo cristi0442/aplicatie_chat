@@ -6,6 +6,7 @@ function ChatWindow({ socket, username, room, token, baseUrl }) {
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
 
+  // Auto-scroll la ultimul mesaj
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -14,12 +15,13 @@ function ChatWindow({ socket, username, room, token, baseUrl }) {
     scrollToBottom();
   }, [messageList]);
 
-  // Functie helper pentru detectia imaginilor
+  // --- LOGICA ESENTIALA: Detectie Imagine vs Text ---
+  // Aceasta functie verifica daca string-ul incepe cu semnatura unei imagini Base64
   const isImageMessage = (content) => {
       return typeof content === 'string' && content.startsWith('data:image');
   };
 
-  // Preluare istoric
+  // 1. Preluare Istoric Conversatie (din baza de date via Server)
   useEffect(() => {
     const fetchHistory = async () => {
         if (!room) return;
@@ -29,56 +31,65 @@ function ChatWindow({ socket, username, room, token, baseUrl }) {
             });
             if (response.ok) {
                 const history = await response.json();
+                // Serverul returneaza [{ message: '...', author: '...', time: '...' }, ...]
                 setMessageList(history);
             }
-        } catch (err) { console.error(err); }
+        } catch (err) { console.error("Eroare la preluarea istoricului:", err); }
     };
     fetchHistory();
   }, [room, token, baseUrl]);
 
-  // Ascultare mesaje live
+  // 2. Ascultare Mesaje Live (prin Socket.IO)
   useEffect(() => {
+    if (!socket) return;
+
     const handler = (data) => {
-        // Acceptam mesajul doar daca este pentru camera curenta
+        // Siguranta: Verificam daca mesajul primit e pentru camera curenta
         if (String(data.room) === String(room)) {
             setMessageList((list) => [...list, data]);
         }
     };
+    
     socket.on("receive_message", handler);
+    
+    // Cleanup pentru a nu primi mesajele de mai multe ori
     return () => socket.off("receive_message", handler);
   }, [socket, room]);
 
+  // 3. Trimitere Mesaj Text
   const sendMessage = async () => {
     if (currentMessage !== "") {
       const messageData = {
         room: room,
         author: username,
-        message: currentMessage,
-        type: 'text',
+        message: currentMessage, // Text simplu
         time: new Date(Date.now()).getHours() + ":" + new Date(Date.now()).getMinutes(),
       };
+      
       await socket.emit("send_message", messageData);
       setCurrentMessage("");
     }
   };
 
+  // 4. Trimitere Imagine (Conversie Fisier -> Base64 -> Socket)
   const handleFileSelect = (e) => {
       const file = e.target.files[0];
       if (file) {
           const reader = new FileReader();
           reader.onload = () => {
               const base64Image = reader.result;
+              
               const messageData = {
                   room: room,
                   author: username,
-                  message: base64Image,
-                  type: 'image',
+                  message: base64Image, // String foarte lung care reprezinta imaginea
                   time: new Date(Date.now()).getHours() + ":" + new Date(Date.now()).getMinutes(),
               };
+              
               socket.emit("send_message", messageData);
           };
           reader.readAsDataURL(file);
-          e.target.value = null; 
+          e.target.value = null; // Reset input pentru a putea selecta aceeasi poza din nou
       }
   };
 
@@ -87,9 +98,11 @@ function ChatWindow({ socket, username, room, token, baseUrl }) {
       <div className="chat-header">
         <p>Conversație (ID: {room})</p>
       </div>
+      
       <div className="messages-container">
         {messageList.map((msg, idx) => {
             const isMe = msg.author === username;
+            // Verificam AICI daca mesajul e poza sau text
             const isImg = isImageMessage(msg.message);
 
             return (
@@ -110,6 +123,7 @@ function ChatWindow({ socket, username, room, token, baseUrl }) {
                                     cursor: 'pointer'
                                 }} 
                                 onClick={() => {
+                                    // Deschide poza mare intr-un tab nou
                                     const win = window.open();
                                     win.document.write('<img src="' + msg.message + '" style="max-width:100%"/>');
                                 }}
@@ -117,6 +131,9 @@ function ChatWindow({ socket, username, room, token, baseUrl }) {
                         ) : (
                             <p style={{margin: 0}}>{msg.message}</p>
                         )}
+                        <span style={{fontSize: '0.7em', opacity: 0.7, display:'block', textAlign: 'right', marginTop: '5px'}}>
+                            {msg.time}
+                        </span>
                     </div>
                 </div>
             );
@@ -125,6 +142,7 @@ function ChatWindow({ socket, username, room, token, baseUrl }) {
       </div>
 
       <div className="message-input-area">
+        {/* Input ascuns pentru fisiere */}
         <input 
             type="file" 
             style={{display:'none'}} 
@@ -132,6 +150,8 @@ function ChatWindow({ socket, username, room, token, baseUrl }) {
             onChange={handleFileSelect} 
             accept="image/*"
         />
+        
+        {/* Butonul Plus */}
         <button 
             className="add-btn" 
             onClick={() => fileInputRef.current.click()}
