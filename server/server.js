@@ -76,6 +76,7 @@ app.post('/login', async (req, res) => {
         const user = result.rows[0];
 
         // --- PROTECTIE CRITICA ---
+        // Daca userul nu are parola (e.g. cont vechi corupt), returnam eroare clara fara sa dam crash
         if (!user.password) {
             console.error(`Eroare: Userul ${username} (ID: ${user.id}) nu are parola setata in DB.`);
             return res.status(500).json({ message: "Cont invalid (fara parola). Te rog creeaza un cont nou." });
@@ -119,13 +120,6 @@ app.post('/conversations/start', authenticateToken, async (req, res) => {
     const myId = req.user.id;
 
     try {
-        // Cautam daca exista deja o conversatie privata intre acesti 2 useri
-        // (Presupunem o structura simpla: tabela conversations si conversation_participants)
-        
-        // Aceasta este o logica simplificata. Intr-un sistem real, query-ul e mai complex.
-        // Aici cream mereu o conversatie noua daca nu gasim una rapid, 
-        // sau returnam una existenta daca o gasim.
-        
         // Pas 1: Creare conversatie
         const convoRes = await pool.query('INSERT INTO conversations DEFAULT VALUES RETURNING id');
         const conversationId = convoRes.rows[0].id;
@@ -141,7 +135,7 @@ app.post('/conversations/start', authenticateToken, async (req, res) => {
         res.json({
             createdNew: true,
             conversationId: conversationId,
-            participanti: [otherUser] // Trimitem lista de participanti (fara noi insine, de obicei)
+            participanti: [otherUser]
         });
 
     } catch (err) {
@@ -154,10 +148,6 @@ app.post('/conversations/start', authenticateToken, async (req, res) => {
 app.get('/my-conversations', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
-        // Selectam conversatiile unde userul este participant
-        // Nota: Query-ul real depinde de structura ta exacta de tabele.
-        // Acesta este un exemplu functional standard.
-        
         const query = `
             SELECT c.id as "conversatieId", c.name as "nume_conversatie"
             FROM conversations c
@@ -166,9 +156,6 @@ app.get('/my-conversations', authenticateToken, async (req, res) => {
             ORDER BY c.created_at DESC
         `;
         const result = await pool.query(query, [userId]);
-        
-        // Pentru fiecare conversatie, trebuie sa gasim si ceilalti participanti (pentru afisare nume)
-        // O varianta simpla e sa facem un loop (nu e cea mai performanta, dar e usor de inteles)
         
         const conversatii = [];
         for (let convo of result.rows) {
@@ -204,7 +191,6 @@ app.get('/messages/:conversationId', authenticateToken, async (req, res) => {
             ORDER BY m.created_at ASC
         `, [conversationId]);
 
-        // Formatam datele pentru frontend
         const mesaje = result.rows.map(m => ({
             id: m.id,
             text: m.text,
@@ -221,7 +207,7 @@ app.get('/messages/:conversationId', authenticateToken, async (req, res) => {
 });
 
 // --- SOCKET.IO (Real-time) ---
-let onlineUsers = {}; // Mapare: userId -> socketId
+let onlineUsers = {}; 
 
 io.use((socket, next) => {
     const token = socket.handshake.auth.token;
@@ -237,29 +223,20 @@ io.use((socket, next) => {
 io.on('connection', (socket) => {
     console.log(`User conectat: ${socket.user.username} (ID: ${socket.user.id})`);
     
-    // Marcam userul ca online
     onlineUsers[socket.user.id] = socket.id;
     io.emit('updateOnlineUsers', onlineUsers);
 
-    // Userul intra in "camerele" conversatiilor lui pentru a primi mesaje
-    // Aici ar trebui sa interogam DB-ul sa vedem in ce conversatii e, dar pentru simplificare:
-    // Frontend-ul poate trimite un event "joinRoom" sau userul primeste doar daca e online.
-    // Varianta simpla: Folosim socket.join pe ID-ul conversatiei cand trimite mesaj.
-
     socket.on('sendMessage', async (data) => {
-        // data = { conversationId, text }
         const { conversationId, text } = data;
         const senderId = socket.user.id;
 
         try {
-            // 1. Salvam in DB
             const insertRes = await pool.query(
                 'INSERT INTO messages (conversation_id, user_id, content) VALUES ($1, $2, $3) RETURNING id, created_at',
                 [conversationId, senderId, text]
             );
             const msgData = insertRes.rows[0];
 
-            // 2. Construim obiectul mesaj
             const messageToSend = {
                 id: msgData.id,
                 text: text,
@@ -269,12 +246,6 @@ io.on('connection', (socket) => {
                 created_at: msgData.created_at
             };
 
-            // 3. Trimitem la toti cei din acea conversatie
-            // O metoda simpla: Trimitem la toti (broadcast) si frontend-ul filtreaza, 
-            // SAU (mai bine) identificam participantii si le trimitem direct.
-            
-            // Aici trimitem un event global 'newMessage' catre toti clientii conectati
-            // Frontend-ul tau (App.jsx) deja verifica: if (mesaj.conversatie_id === selected.id)
             io.emit('newMessage', messageToSend);
 
         } catch (err) {
