@@ -68,8 +68,6 @@ function ConversationList({ socket, token, currentUser, joinRoom, baseUrl }) {
       <h3>Conversatii</h3>
       <ul>
         {conversations.map((convo) => {
-            // Logica Veche: Gasim partenerul de discutie (cel care NU sunt eu)
-            // currentUser este pasat din App.jsx
             const partener = convo.participanti.find(p => p.username !== currentUser?.username);
             const numeAfisat = partener ? partener.username : "Chat Necunoscut";
             
