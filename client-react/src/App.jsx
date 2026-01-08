@@ -7,7 +7,7 @@ import ConversationList from './ConversationList';
 import OnlineUsers from './OnlineUsers';
 
 // URL-ul backend-ului tau de pe Render
-const SERVER_URL = "https://aplicatie-chat-backend.onrender.com";
+const SERVER_URL = "https://aplicatie-chat.onrender.com";
 
 function App() {
   const [user, setUser] = useState(null);
