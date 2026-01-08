@@ -6,7 +6,6 @@ function ChatWindow({ socket, username, room, token, baseUrl }) {
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
 
-  // Auto-scroll la ultimul mesaj
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -15,7 +14,6 @@ function ChatWindow({ socket, username, room, token, baseUrl }) {
     scrollToBottom();
   }, [messageList]);
 
-  // --- LOGICA ESENTIALA: Detectie Imagine vs Text ---
   // Aceasta functie verifica daca string-ul incepe cu semnatura unei imagini Base64
   const isImageMessage = (content) => {
       return typeof content === 'string' && content.startsWith('data:image');
@@ -31,7 +29,6 @@ function ChatWindow({ socket, username, room, token, baseUrl }) {
             });
             if (response.ok) {
                 const history = await response.json();
-                // Serverul returneaza [{ message: '...', author: '...', time: '...' }, ...]
                 setMessageList(history);
             }
         } catch (err) { console.error("Eroare la preluarea istoricului:", err); }
@@ -82,14 +79,14 @@ function ChatWindow({ socket, username, room, token, baseUrl }) {
               const messageData = {
                   room: room,
                   author: username,
-                  message: base64Image, // String foarte lung care reprezinta imaginea
+                  message: base64Image, 
                   time: new Date(Date.now()).getHours() + ":" + new Date(Date.now()).getMinutes(),
               };
               
               socket.emit("send_message", messageData);
           };
           reader.readAsDataURL(file);
-          e.target.value = null; // Reset input pentru a putea selecta aceeasi poza din nou
+          e.target.value = null; 
       }
   };
 
@@ -102,7 +99,6 @@ function ChatWindow({ socket, username, room, token, baseUrl }) {
       <div className="messages-container">
         {messageList.map((msg, idx) => {
             const isMe = msg.author === username;
-            // Verificam AICI daca mesajul e poza sau text
             const isImg = isImageMessage(msg.message);
 
             return (
@@ -123,7 +119,6 @@ function ChatWindow({ socket, username, room, token, baseUrl }) {
                                     cursor: 'pointer'
                                 }} 
                                 onClick={() => {
-                                    // Deschide poza mare intr-un tab nou
                                     const win = window.open();
                                     win.document.write('<img src="' + msg.message + '" style="max-width:100%"/>');
                                 }}
