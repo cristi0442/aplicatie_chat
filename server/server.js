@@ -9,16 +9,16 @@ const authMiddleware = require('./authMiddleware');
 
 const app = express();
 app.use(express.json());
-// Permitem accesul de oriunde (pentru Vercel/Localhost)
+// CORS permisiv pentru a accepta conexiuni de pe Vercel sau Localhost
 app.use(cors({ origin: "*" }));
 
 const server = http.createServer(app);
 
-// Configurare Socket.io pentru Render (timeout-uri marite) si poze mari
+// Configurare Socket.io
 const io = new Server(server, {
     cors: { origin: "*" },
     maxHttpBufferSize: 1e8, // 100 MB pentru poze
-    pingTimeout: 60000,     // Fix pentru Problema 7 (Render disconnects)
+    pingTimeout: 60000,
     pingInterval: 25000
 });
 
@@ -73,7 +73,6 @@ app.post('/login', async (req, res) => {
 });
 
 // --- RUTE CHAT ---
-
 app.get('/my-conversations', authMiddleware, async (req, res) => {
     const userId = req.user.id;
     try {
@@ -103,15 +102,9 @@ app.post('/conversations/start', authMiddleware, async (req, res) => {
     if (!otherId) return res.status(400).json({ message: "Lipseste ID user" });
 
     try {
-        // Fix Problema 5: Verifica daca exista deja (optional, dar mai simplu e sa cream una noua momentan ca sa nu complicam)
-        // Cream conversatia
         const newConv = await pool.query("INSERT INTO conversatii (nume_conversatie) VALUES (NULL) RETURNING id", []);
         const convId = newConv.rows[0].id;
-        
-        // Adaugam participantii
         await pool.query("INSERT INTO participanti (conversatie_id, utilizator_id) VALUES ($1, $2), ($1, $3)", [convId, myId, otherId]);
-        
-        // Important: Trebuie sa anuntam socket-urile sa intre in camera noua, dar e mai simplu sa dam refresh la frontend.
         res.json({ conversationId: convId });
     } catch (err) { console.error(err); res.status(500).json({ message: "Err" }); }
 });
@@ -119,7 +112,6 @@ app.post('/conversations/start', authMiddleware, async (req, res) => {
 app.get('/messages/:room', authMiddleware, async (req, res) => {
     try {
         const { room } = req.params;
-        // Fix Problema 3: Schema DB veche
         const result = await pool.query(`
             SELECT m.continut as message, u.username as author, m.data_trimiterii as time
             FROM mesaje m
@@ -127,12 +119,11 @@ app.get('/messages/:room', authMiddleware, async (req, res) => {
             WHERE m.conversatie_id = $1
             ORDER BY m.data_trimiterii ASC
         `, [room]);
-        
         res.json(result.rows);
     } catch (err) { console.error(err); res.status(500).json({ message: "Err" }); }
 });
 
-// --- SOCKET.IO LOGIC ---
+// --- SOCKET.IO ---
 let onlineUsers = {};
 
 io.on('connection', async (socket) => {
@@ -145,36 +136,28 @@ io.on('connection', async (socket) => {
             const decoded = jwt.verify(token, JWT_SECRET);
             userId = decoded.id;
             username = decoded.username;
-            
-            // Fix Problema 6: Salvam si username-ul
             onlineUsers[userId] = { socketId: socket.id, username };
             
-            // Fix Problema 2: JOIN ROOMS
-            // Utilizatorul intra automat in toate camerele lui de conversatie existente in DB
+            // Join camere existente
             const myConvos = await pool.query('SELECT conversatie_id FROM participanti WHERE utilizator_id = $1', [userId]);
-            myConvos.rows.forEach(c => {
-                socket.join(String(c.conversatie_id));
-                console.log(`User ${username} joined room ${c.conversatie_id}`);
-            });
+            myConvos.rows.forEach(c => socket.join(String(c.conversatie_id)));
 
         } catch (e) { console.error("Socket Auth Error", e); }
     }
 
-    // Trimitem lista de useri catre frontend
     io.emit('updateOnlineUsers', Object.fromEntries(Object.entries(onlineUsers).map(([id, d]) => [id, d.username])));
 
+    socket.on('join_room', (roomId) => {
+        socket.join(String(roomId));
+    });
+
     socket.on('send_message', async (data) => {
-        // data: { room, author, message, type, time }
         try {
-            // Salvam in DB (Fix Problema 3: tabela 'mesaje')
             await pool.query(
                 `INSERT INTO mesaje (continut, expeditor_id, conversatie_id) VALUES ($1, $2, $3)`,
                 [data.message, userId, data.room]
             );
-            
-            // Fix Problema 1: Trimitem DOAR in camera specifica
             io.to(String(data.room)).emit('receive_message', data);
-            
         } catch (e) { console.error("Send Msg Error", e); }
     });
 
@@ -184,4 +167,5 @@ io.on('connection', async (socket) => {
     });
 });
 
+// ACEASTA ESTE SINGURA LINIE CARE PORNESTE SERVERUL
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
