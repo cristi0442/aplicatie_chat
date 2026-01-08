@@ -1,7 +1,6 @@
 import React from 'react';
 
 function OnlineUsers({ onlineUsers, myUserId, onSelectUser }) {
-    // Filtreaza utilizatorul curent din listă
     const filteredUsers = Object.entries(onlineUsers)
         .filter(([userId, username]) => parseInt(userId, 10) !== myUserId);
 
