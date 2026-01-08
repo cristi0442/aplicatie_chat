@@ -1,68 +1,64 @@
 import React, { useState, useEffect } from 'react';
 
-function ConversationList({ token, onSelectConversation, refreshKey }) {
-    const [conversations, setConversations] = useState([]);
-    const [error, setError] = useState('');
-    const [activeId, setActiveId] = useState(null);
+function ConversationList({ socket, token, currentUser, joinRoom }) {
+  const [conversations, setConversations] = useState([]);
+  const [newChatUser, setNewChatUser] = useState("");
 
-    useEffect(() => {
-        const fetchConversations = async () => {
-            try {
-                // ACTUALIZARE: Link-ul catre serverul live Render
-                const response = await fetch("https://aplicatie-chat.onrender.com/my-conversations", {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
+  const fetchConversations = async () => {
+    try {
+      const url = "https://aplicatie-chat-backend.onrender.com/my-conversations";
 
-                if (!response.ok) {
-                    throw new Error('Eroare la preluarea conversatiilor');
-                }
-                const data = await response.json();
-                if (Array.isArray(data)) setConversations(data);
-                else if (data.conversatii) setConversations(data.conversatii);
-                else setConversations([]);
-            } catch (err) {
-                setError(err.message);
-            }
-        };
+      const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (response.ok) setConversations(await response.json());
+    } catch (err) { console.error(err); }
+  };
 
-        if (token) {
+  useEffect(() => { if (token) fetchConversations(); }, [token]);
+
+  const startNewChat = async () => {
+    if (!newChatUser) return;
+    try {
+       const url = "https://aplicatie-chat-backend.onrender.com/conversations/start";
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ otherUserId: newChatUser })
+        });
+        if (response.ok) {
+            const data = await response.json();
+            joinRoom(data.conversationId);
             fetchConversations();
+            setNewChatUser("");
         }
-    }, [token, refreshKey]);
+    } catch (err) { console.error(err); }
+  };
 
-    const getConversationName = (convo) => {
-        if (convo.nume_conversatie) return convo.nume_conversatie;
-        if (convo.participanti.length === 0) return `Doar tu (ID ${convo.conversatieId})`;
-        if (convo.participanti.length === 1) return `Chat cu ${convo.participanti[0].username}`;
+  return (
+    <div className="list-section">
+      <div style={{display: 'flex', gap: '5px', marginBottom: '15px'}}>
+        <input 
+            type="number" placeholder="ID User..." 
+            value={newChatUser} onChange={(e) => setNewChatUser(e.target.value)}
+            style={{width: '100%'}}
+        />
+        <button onClick={startNewChat} style={{width: '50px', padding: '0'}}>+</button>
+      </div>
 
-        return convo.participanti.map(p => p.username).join(', ');
-    };
-
-    // Functie apelata la click
-    const handleSelect = (convo) => {
-        setActiveId(convo.conversatieId);
-        onSelectConversation(convo);
-    }
-
-    return (
-        <div className="list-section">
-            <h3>Conversațiile Mele</h3>
-            {error && <p style={{ color: 'red' }}>{error}</p>}
-            <ul>
-                {conversations.map(convo => (
-                    <li
-                        key={convo.conversatieId}
-                        onClick={() => handleSelect(convo)}
-                        className={convo.conversatieId === activeId ? 'active' : ''}
-                    >
-                        {getConversationName(convo)}
-                    </li>
-                ))}
-            </ul>
-        </div>
-    );
+      <h3>Conversatii</h3>
+      <ul>
+        {conversations.map((convo) => {
+            const partener = convo.participanti.find(p => p.username !== currentUser.username);
+            const numeAfisat = partener ? partener.username : "Chat";
+            return (
+              <li key={convo.conversatieId} onClick={() => joinRoom(convo.conversatieId)}>
+                <strong>{numeAfisat}</strong>
+              </li>
+            );
+        })}
+      </ul>
+    </div>
+  );
 }
 
 export default ConversationList;

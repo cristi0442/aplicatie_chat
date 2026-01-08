@@ -1,164 +1,99 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { io } from 'socket.io-client';
+import React, { useState, useEffect } from 'react';
+import io from "socket.io-client";
 import './App.css';
 import AuthPage from './AuthPage';
+import ChatWindow from './ChatWindow';
 import ConversationList from './ConversationList';
 import OnlineUsers from './OnlineUsers';
-import ChatWindow from './ChatWindow';
 
 function App() {
-    const [user, setUser] = useState(null);
-    const [token, setToken] = useState(null);
-    const [onlineUsers, setOnlineUsers] = useState({});
-    const [selectedConversation, setSelectedConversation] = useState(null);
-    const [conversationRefreshKey, setConversationRefreshKey] = useState(0);
-    const [mesaje, setMesaje] = useState([]);
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
+  const [currentRoom, setCurrentRoom] = useState(null);
+  const [socket, setSocket] = useState(null); 
+  const [onlineUsers, setOnlineUsers] = useState({});
 
-    const socketRef = useRef(null);
-
-    const handleLoginSuccess = (loggedInUser, authToken) => {
-        setUser(loggedInUser);
-        setToken(authToken);
-    };
-
-    const handleLogout = () => {
-        localStorage.removeItem('chat_token');
-        localStorage.removeItem('chat_user');
-
-        setToken(null);
-        setOnlineUsers({});
-        setSelectedConversation(null);
-        setMesaje([]);
-
-        setUser(null);
-    };
-
-    useEffect(() => {
-        if (user && token) {
-            // CONEXIUNE SOCKET.IO LA SERVERUL LIVE
-            const newSocket = io("https://aplicatie-chat.onrender.com", {
-                auth: { token: token }
-            });
-            socketRef.current = newSocket;
-
-            newSocket.on('updateOnlineUsers', (users) => {
-                setOnlineUsers(users);
-            });
-
-            return () => {
-                newSocket.disconnect();
-                socketRef.current = null;
-            };
-        }
-    }, [user, token]);
-
-    useEffect(() => {
-        const currentSocket = socketRef.current;
-
-        if (!currentSocket) return;
-
-        const handleNewMessage = (mesajPrimit) => {
-            if (selectedConversation && mesajPrimit.conversatie_id === selectedConversation.conversatieId) {
-                setMesaje(prev => [...prev, mesajPrimit]);
-            }
-        };
-
-        currentSocket.on('newMessage', handleNewMessage);
-
-        return () => {
-            // Folosim verificarea optionala (?.) pentru siguranta
-            if (currentSocket) {
-                currentSocket.off('newMessage', handleNewMessage);
-            }
-        };
-
-    }, [selectedConversation, user]);
-
-    //  FETCH ISTORIC MESAJE (ACTUALIZAT CU LINK SERVER LIVE)
-    const handleSelectConversation = async (convo) => {
-        setSelectedConversation(convo);
-        setMesaje([]);
-
-        try {
-            const response = await fetch(`https://aplicatie-chat.onrender.com/messages/${convo.conversatieId}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            if (!response.ok) throw new Error('Fetch failed');
-
-            const istoric = await response.json();
-            setMesaje(istoric);
-
-        } catch (err) {
-            console.error("Eroare la fetch mesaje:", err);
-        }
-    };
-
-    //  START / JOIN CONVERSATIE (ACTUALIZAT CU LINK SERVER LIVE)
-    const handleSelectUser = async (otherUserId) => {
-        if (!user || !token) return;
-        const targetId = parseInt(otherUserId, 10);
-        if (targetId === user.id) return alert("Nu poti vorbi cu tine.");
-
-        try {
-            const res = await fetch("https://aplicatie-chat.onrender.com/conversations/start", {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ otherUserId: targetId })
-            });
-
-            if (!res.ok) throw new Error('Eroare start conversatie');
-            const data = await res.json();
-
-            const newConversation = {
-                conversatieId: data.conversationId,
-                participanti: data.participanti || [],
-                nume_conversatie: null
-            };
-
-            handleSelectConversation(newConversation);
-            if (data.createdNew) setConversationRefreshKey(k => k + 1);
-
-        } catch (err) { console.error(err); }
-    };
-
-
-    if (!user) {
-        return <AuthPage onLoginSuccess={handleLoginSuccess} />;
+  useEffect(() => {
+    const storedUser = localStorage.getItem('chat_user');
+    const storedToken = localStorage.getItem('chat_token');
+    if (storedUser && storedToken) {
+        setUser(JSON.parse(storedUser));
+        setToken(storedToken);
     }
+  }, []);
 
-    return (
-        <div className="app-layout">
-            <div className="sidebar">
-                <div className="sidebar-header">
-                    <strong>{user.username}</strong>
-                    <button onClick={handleLogout} className="logout-button">Logout</button>
-                </div>
+  const handleLoginSuccess = (userData, authToken) => {
+      setUser(userData); 
+      setToken(authToken);
+      localStorage.setItem('chat_user', JSON.stringify(userData));
+      localStorage.setItem('chat_token', authToken);
+  };
 
-                <ConversationList
-                    token={token}
-                    onSelectConversation={handleSelectConversation}
-                    refreshKey={conversationRefreshKey}
-                />
+  const handleLogout = () => {
+    localStorage.removeItem('chat_user');
+    localStorage.removeItem('chat_token');
+    if (socket) socket.disconnect();
+    setSocket(null);
+    setUser(null);
+    setToken(null);
+    setCurrentRoom(null);
+  };
 
-                <OnlineUsers
-                    onlineUsers={onlineUsers}
-                    myUserId={user.id}
-                    onSelectUser={handleSelectUser}
-                />
-            </div>
+  useEffect(() => {
+    if (user && token) {
+      const socketUrl = "https://aplicatie-chat-backend.onrender.com";
 
-            <div className="chat-area">
-                {/* Verificam daca avem conversatie selectata pentru a evita erori vizuale */}
-                <ChatWindow
-                    socket={socketRef.current}
-                    user={user}
-                    selectedConversation={selectedConversation}
-                    mesaje={mesaje}
-                />
-            </div>
+      const newSocket = io(socketUrl, { auth: { token: token } });
+      setSocket(newSocket);
+      newSocket.on('updateOnlineUsers', (users) => setOnlineUsers(users));
+      return () => { newSocket.disconnect(); setSocket(null); };
+    }
+  }, [user, token]);
+
+  if (!user) {
+    return <AuthPage onLoginSuccess={handleLoginSuccess} />;
+  }
+
+  return (
+    <div className="app-layout">
+      <div className="sidebar">
+        <div className="sidebar-header">
+          <div style={{display: 'flex', flexDirection: 'column'}}>
+             <span style={{fontSize: '0.8rem', opacity: 0.7}}>Salut,</span>
+             <strong>{user.username}</strong>
+          </div>
+          <button onClick={handleLogout} className="logout-button">Logout</button>
         </div>
-    );
+        
+        <ConversationList 
+          socket={socket} 
+          token={token} 
+          currentUser={user} 
+          joinRoom={setCurrentRoom} 
+        />
+        
+        <div className="list-section" style={{ flex: 'none', height: '150px', borderTop: '1px solid var(--border-color)' }}>
+           <h3>Utilizatori Online</h3>
+           <OnlineUsers onlineUsers={onlineUsers} />
+        </div>
+      </div>
+
+      <div className="chat-area">
+        {currentRoom && socket ? (
+          <ChatWindow 
+            socket={socket} 
+            username={user.username} 
+            room={currentRoom} 
+            token={token}
+          />
+        ) : (
+          <div className="chat-window-placeholder">
+            Selecteaza o conversatie sau incepe una noua (+)
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default App;
