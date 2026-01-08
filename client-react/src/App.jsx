@@ -6,13 +6,12 @@ import ChatWindow from './ChatWindow';
 import ConversationList from './ConversationList';
 import OnlineUsers from './OnlineUsers';
 
-// URL-ul backend-ului tau de pe Render
 const SERVER_URL = "https://aplicatie-chat.onrender.com";
 
 function App() {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
-  const [currentRoom, setCurrentRoom] = useState(null); // ID-ul conversatiei selectate
+  const [currentRoom, setCurrentRoom] = useState(null); 
   const [socket, setSocket] = useState(null); 
   const [onlineUsers, setOnlineUsers] = useState({});
 
@@ -49,7 +48,6 @@ function App() {
       // Conectare la serverul Render
       const newSocket = io(SERVER_URL, { 
           auth: { token: token },
-          // Optiuni extra pentru stabilitate pe Render
           reconnection: true,
           reconnectionAttempts: 5,
       });
