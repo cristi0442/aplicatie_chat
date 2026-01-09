@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import {
     AgoraRTCProvider,
     useJoin,
@@ -7,11 +7,10 @@ import {
     usePublish,
     useRemoteUsers,
     useRTCClient,
-    RemoteUser,
-    LocalUser
 } from "agora-rtc-react";
 import AgoraRTC from "agora-rtc-sdk-ng";
 
+// ⚠️ PUNE APP ID-UL TĂU AICI
 const APP_ID = "6d8c5d4ae36048078acd744458928be4";
 
 export const VideoCall = ({ channelName, onEndCall }) => {
@@ -25,20 +24,24 @@ export const VideoCall = ({ channelName, onEndCall }) => {
 };
 
 const CallInterface = ({ channelName, onEndCall }) => {
-    // 1. Conectare la canal
-    useJoin({ appid: APP_ID, channel: channelName, token: null });
+    // 1. CONECTARE (fără UID, serverul decide)
+    useJoin({
+        appid: APP_ID,
+        channel: channelName,
+        token: null
+    });
 
-    // 2. Preluam track-urile (Video si Audio)
+    // 2. PRELUARE TRACK-URI LOCALE
     const { localMicrophoneTrack, isLoading: isLoadingMic } = useLocalMicrophoneTrack();
     const { localCameraTrack, isLoading: isLoadingCam } = useLocalCameraTrack();
 
-    // 3. Publicam DOAR cand track-urile sunt gata (nu sunt null)
-    // Am reparat si eroarea de scriere "localLocal" de data trecuta
+    // 3. PUBLICARE
     usePublish([localMicrophoneTrack, localCameraTrack]);
 
+    // 4. PRELUARE UTILIZATORI REMOTE
     const remoteUsers = useRemoteUsers();
 
-    // 4. Verificare critica: Daca camera inca se incarca, afisam un mesaj, nu ecranul negru
+    // ZONA DE LOADING
     if (isLoadingMic || isLoadingCam) {
         return (
             <div style={styles.overlay}>
@@ -55,23 +58,16 @@ const CallInterface = ({ channelName, onEndCall }) => {
                 </h3>
 
                 <div style={styles.grid}>
-                    {/* Videoul MEU */}
+                    {/* --- VIDEO LOCAL (TU) --- */}
                     <div style={styles.videoCard}>
-                        <LocalUser
-                            audioTrack={localMicrophoneTrack}
-                            cameraTrack={localCameraTrack}
-                            micOn={true}
-                            cameraOn={true}
-                            style={{ width: '100%', height: '100%' }}
-                        />
-                        <span style={styles.label}>Tu</span>
+                        {/* Folosim componenta noastră custom "AgoraPlayer" */}
+                        <AgoraPlayer track={localCameraTrack} text="Tu" />
                     </div>
 
-                    {/* Videoul LUI (Partenerul) */}
+                    {/* --- VIDEO REMOTE (PARTENERI) --- */}
                     {remoteUsers.map((user) => (
                         <div key={user.uid} style={styles.videoCard}>
-                            <RemoteUser user={user} style={{ width: '100%', height: '100%' }} />
-                            <span style={styles.label}>Partener</span>
+                            <AgoraPlayer track={user.videoTrack} text="Partener" />
                         </div>
                     ))}
 
@@ -90,6 +86,33 @@ const CallInterface = ({ channelName, onEndCall }) => {
     );
 };
 
+// --- COMPONENTA MAGICĂ (Fix-ul pentru erorile tale) ---
+// Aceasta foloseste metoda .play() direct din documentatia Agora Core
+// Nu folosim <LocalUser> care dadea erori de React.
+const AgoraPlayer = ({ track, text }) => {
+    const vidDiv = useRef(null);
+
+    useEffect(() => {
+        if (track && vidDiv.current) {
+            // Documentatia spune: track.play(element)
+            track.play(vidDiv.current);
+        }
+        return () => {
+            // Cleanup (nu oprim track-ul local ca sa nu il distrugem, dar curatam div-ul)
+        };
+    }, [track]);
+
+    return (
+        <div
+            ref={vidDiv}
+            style={{ width: "100%", height: "100%", position: "relative", overflow: "hidden" }}
+        >
+            <span style={styles.label}>{text}</span>
+        </div>
+    );
+};
+
+// STILURI
 const styles = {
     overlay: {
         position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
@@ -112,11 +135,12 @@ const styles = {
     },
     label: {
         position: 'absolute', bottom: '10px', left: '10px',
-        color: 'white', background: 'rgba(0,0,0,0.7)', padding: '4px 8px', borderRadius: '4px', fontSize: '12px'
+        color: 'white', background: 'rgba(0,0,0,0.7)', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', zIndex: 10, pointerEvents: 'none'
     },
     hangupBtn: {
         backgroundColor: '#ff4d4d', color: 'white', padding: '12px 30px',
-        border: 'none', borderRadius: '30px', fontSize: '16px', cursor: 'pointer', fontWeight: 'bold'
+        border: 'none', borderRadius: '30px', fontSize: '16px', cursor: 'pointer', fontWeight: 'bold',
+        boxShadow: '0 4px 10px rgba(255, 77, 77, 0.4)'
     }
 };
 
