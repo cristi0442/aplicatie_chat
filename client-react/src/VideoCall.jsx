@@ -10,138 +10,183 @@ import {
 } from "agora-rtc-react";
 import AgoraRTC from "agora-rtc-sdk-ng";
 
-// ⚠️ PUNE APP ID-UL TĂU AICI
 const APP_ID = "6d8c5d4ae36048078acd744458928be4";
 
+
 export const VideoCall = ({ channelName, onEndCall }) => {
-    const client = useRTCClient(AgoraRTC.createClient({ codec: "vp8", mode: "rtc" }));
+    const client = useRTCClient(
+        AgoraRTC.createClient({ codec: "vp8", mode: "rtc" })
+    );
 
     return (
         <AgoraRTCProvider client={client}>
-            <CallInterface channelName={channelName} onEndCall={onEndCall} />
+            <Call channelName={channelName} onEndCall={onEndCall} />
         </AgoraRTCProvider>
     );
 };
 
-const CallInterface = ({ channelName, onEndCall }) => {
-    // 1. CONECTARE (fără UID, serverul decide)
+
+const Call = ({ channelName, onEndCall }) => {
+    const client = useRTCClient();
+
     useJoin({
         appid: APP_ID,
         channel: channelName,
-        token: null
+        token: null,
     });
 
-    // 2. PRELUARE TRACK-URI LOCALE
-    const { localMicrophoneTrack, isLoading: isLoadingMic } = useLocalMicrophoneTrack();
-    const { localCameraTrack, isLoading: isLoadingCam } = useLocalCameraTrack();
+    const { localMicrophoneTrack } = useLocalMicrophoneTrack();
+    const { localCameraTrack } = useLocalCameraTrack();
 
-    // 3. PUBLICARE
     usePublish([localMicrophoneTrack, localCameraTrack]);
 
-    // 4. PRELUARE UTILIZATORI REMOTE
+    useEffect(() => {
+        if (!client) return;
+
+        const handleUserPublished = async (user, mediaType) => {
+            await client.subscribe(user, mediaType);
+
+            if (mediaType === "audio") {
+                user.audioTrack?.play();
+            }
+        };
+
+        client.on("user-published", handleUserPublished);
+
+        return () => {
+            client.off("user-published", handleUserPublished);
+        };
+    }, [client]);
+
     const remoteUsers = useRemoteUsers();
 
-    // ZONA DE LOADING
-    if (isLoadingMic || isLoadingCam) {
-        return (
-            <div style={styles.overlay}>
-                <h2 style={{color: 'white'}}>Se pornește camera...</h2>
-            </div>
-        );
-    }
+    const endCall = async () => {
+        localCameraTrack?.stop();
+        localCameraTrack?.close();
+        localMicrophoneTrack?.stop();
+        localMicrophoneTrack?.close();
+
+        await client.leave();
+        onEndCall();
+    };
 
     return (
         <div style={styles.overlay}>
             <div style={styles.container}>
-                <h3 style={{color: 'white', marginBottom: '15px'}}>
-                    În apel: {channelName}
-                </h3>
+                <h3 style={styles.title}>În apel: {channelName}</h3>
 
                 <div style={styles.grid}>
-                    {/* --- VIDEO LOCAL (TU) --- */}
-                    <div style={styles.videoCard}>
-                        {/* Folosim componenta noastră custom "AgoraPlayer" */}
-                        <AgoraPlayer track={localCameraTrack} text="Tu" />
-                    </div>
+                    {/* LOCAL */}
+                    <VideoPlayer track={localCameraTrack} label="Tu" />
 
-                    {/* --- VIDEO REMOTE (PARTENERI) --- */}
-                    {remoteUsers.map((user) => (
-                        <div key={user.uid} style={styles.videoCard}>
-                            <AgoraPlayer track={user.videoTrack} text="Partener" />
-                        </div>
-                    ))}
+                    {/* REMOTE */}
+                    {remoteUsers.map((user) =>
+                        user.videoTrack ? (
+                            <VideoPlayer
+                                key={user.uid}
+                                track={user.videoTrack}
+                                label="Partener"
+                            />
+                        ) : (
+                            <div key={user.uid} style={styles.placeholder}>
+                                Camera oprită
+                            </div>
+                        )
+                    )}
 
                     {remoteUsers.length === 0 && (
-                        <div style={styles.placeholderCard}>
-                            <p style={{color: '#aaa', textAlign: 'center'}}>Așteptăm partenerul...</p>
+                        <div style={styles.placeholder}>
+                            Așteptăm partenerul...
                         </div>
                     )}
                 </div>
 
-                <button onClick={onEndCall} style={styles.hangupBtn}>
-                    Închide Apelul
+                <button onClick={endCall} style={styles.hangup}>
+                    Închide apelul
                 </button>
             </div>
         </div>
     );
 };
 
-// --- COMPONENTA MAGICĂ (Fix-ul pentru erorile tale) ---
-// Aceasta foloseste metoda .play() direct din documentatia Agora Core
-// Nu folosim <LocalUser> care dadea erori de React.
-const AgoraPlayer = ({ track, text }) => {
-    const vidDiv = useRef(null);
+const VideoPlayer = ({ track, label }) => {
+    const ref = useRef(null);
 
     useEffect(() => {
-        if (track && vidDiv.current) {
-            // Documentatia spune: track.play(element)
-            track.play(vidDiv.current);
+        if (track && ref.current) {
+            track.play(ref.current);
         }
-        return () => {
-            // Cleanup (nu oprim track-ul local ca sa nu il distrugem, dar curatam div-ul)
-        };
+        return () => track?.stop();
     }, [track]);
 
     return (
-        <div
-            ref={vidDiv}
-            style={{ width: "100%", height: "100%", position: "relative", overflow: "hidden" }}
-        >
-            <span style={styles.label}>{text}</span>
+        <div ref={ref} style={styles.video}>
+            <span style={styles.label}>{label}</span>
         </div>
     );
 };
 
-// STILURI
 const styles = {
     overlay: {
-        position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
-        backgroundColor: 'rgba(0,0,0,0.95)', zIndex: 9999,
-        display: 'flex', alignItems: 'center', justifyContent: 'center'
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.95)",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        zIndex: 9999,
     },
     container: {
-        display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%'
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        width: "100%",
     },
+    title: { color: "white", marginBottom: 20 },
     grid: {
-        display: 'flex', flexWrap: 'wrap', gap: '20px', justifyContent: 'center', marginBottom: '30px'
+        display: "flex",
+        gap: 20,
+        flexWrap: "wrap",
+        justifyContent: "center",
+        marginBottom: 30,
     },
-    videoCard: {
-        width: '320px', height: '240px', backgroundColor: '#000',
-        borderRadius: '12px', overflow: 'hidden', position: 'relative', border: '2px solid #333'
-    },
-    placeholderCard: {
-        width: '320px', height: '240px', backgroundColor: '#222',
-        borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px dashed #555'
+    video: {
+        width: 320,
+        height: 240,
+        background: "#000",
+        borderRadius: 12,
+        position: "relative",
+        overflow: "hidden",
     },
     label: {
-        position: 'absolute', bottom: '10px', left: '10px',
-        color: 'white', background: 'rgba(0,0,0,0.7)', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', zIndex: 10, pointerEvents: 'none'
+        position: "absolute",
+        bottom: 10,
+        left: 10,
+        color: "white",
+        background: "rgba(0,0,0,0.6)",
+        padding: "4px 8px",
+        borderRadius: 6,
+        fontSize: 12,
     },
-    hangupBtn: {
-        backgroundColor: '#ff4d4d', color: 'white', padding: '12px 30px',
-        border: 'none', borderRadius: '30px', fontSize: '16px', cursor: 'pointer', fontWeight: 'bold',
-        boxShadow: '0 4px 10px rgba(255, 77, 77, 0.4)'
-    }
+    placeholder: {
+        width: 320,
+        height: 240,
+        background: "#222",
+        color: "#aaa",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        borderRadius: 12,
+    },
+    hangup: {
+        background: "#ff4d4d",
+        color: "white",
+        padding: "12px 32px",
+        borderRadius: 30,
+        border: "none",
+        fontSize: 16,
+        cursor: "pointer",
+    },
 };
 
 export default VideoCall;
