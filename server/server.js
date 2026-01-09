@@ -171,6 +171,22 @@ io.on('connection', async (socket) => {
         } catch (e) { console.error("Send Msg Error", e); }
     });
 
+    // --- LOGICA DE APEL VIDEO (AGORA) ---
+    // 1. Initiere Apel: Cel care suna anunta camera
+    socket.on("startCall", ({ room, callerName }) => {
+        // Trimitem notificarea tuturor din camera (mai putin tie)
+        // Deoarece ambii useri au facut join la inceput (vezi linia 152 in server.js original), va merge.
+        socket.to(String(room)).emit("incomingCall", {
+            callerName,
+            room
+        });
+    });
+
+    // 2. Respingere / Inchidere Apel
+    socket.on("endCall", ({ room }) => {
+        socket.to(String(room)).emit("callEnded");
+    });
+
     socket.on('disconnect', () => {
         if (userId) delete onlineUsers[userId];
         io.emit('updateOnlineUsers', Object.fromEntries(Object.entries(onlineUsers).map(([id, d]) => [id, d.username])));
