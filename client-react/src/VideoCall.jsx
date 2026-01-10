@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect } from "react";
 import {
     AgoraRTCProvider,
     useJoin,
@@ -7,12 +7,14 @@ import {
     usePublish,
     useRemoteUsers,
     useRTCClient,
+    LocalUser,
+    RemoteUser
 } from "agora-rtc-react";
 import AgoraRTC from "agora-rtc-sdk-ng";
 
-const APP_ID = "6d8c5d4ae36048078acd744458928be4";
+const APP_ID = "30e5f9ce4cd3419ba8d30fae2c81358f";
 
-
+// ================= ROOT =================
 export const VideoCall = ({ channelName, onEndCall }) => {
     const client = useRTCClient(
         AgoraRTC.createClient({ codec: "vp8", mode: "rtc" })
@@ -25,47 +27,45 @@ export const VideoCall = ({ channelName, onEndCall }) => {
     );
 };
 
-
+// ================= CALL =================
 const Call = ({ channelName, onEndCall }) => {
     const client = useRTCClient();
 
-    useJoin({
+    // 1️⃣ JOIN (fără uid → evităm INVALID_PARAMS)
+    const { isConnected } = useJoin({
         appid: APP_ID,
         channel: channelName,
         token: null,
     });
 
+    // 2️⃣ TRACK-URI LOCALE
     const { localMicrophoneTrack } = useLocalMicrophoneTrack();
     const { localCameraTrack } = useLocalCameraTrack();
 
-    usePublish([localMicrophoneTrack, localCameraTrack]);
-
-    useEffect(() => {
-        if (!client) return;
-
-        const handleUserPublished = async (user, mediaType) => {
-            await client.subscribe(user, mediaType);
-
-            if (mediaType === "audio") {
-                user.audioTrack?.play();
-            }
-        };
-
-        client.on("user-published", handleUserPublished);
-
-        return () => {
-            client.off("user-published", handleUserPublished);
-        };
-    }, [client]);
+    // 3️⃣ PUBLISH DOAR DUPĂ JOIN
+    usePublish(
+        isConnected ? [localMicrophoneTrack, localCameraTrack] : []
+    );
 
     const remoteUsers = useRemoteUsers();
 
+    // 🔥 FIX CRITIC: SUBSCRIBE MANUAL DOAR LA VIDEO REMOTE
+    useEffect(() => {
+        if (!client) return;
+
+        remoteUsers.forEach(async (user) => {
+            if (user.hasVideo && !user.videoTrack) {
+                await client.subscribe(user, "video");
+            }
+        });
+    }, [remoteUsers, client]);
+
+    // 4️⃣ CLEANUP
     const endCall = async () => {
         localCameraTrack?.stop();
         localCameraTrack?.close();
         localMicrophoneTrack?.stop();
         localMicrophoneTrack?.close();
-
         await client.leave();
         onEndCall();
     };
@@ -73,35 +73,43 @@ const Call = ({ channelName, onEndCall }) => {
     return (
         <div style={styles.overlay}>
             <div style={styles.container}>
-                <h3 style={styles.title}>În apel: {channelName}</h3>
+                <h3 style={{ color: "white", marginBottom: 15 }}>
+                    În apel: {channelName}
+                </h3>
 
                 <div style={styles.grid}>
-                    {/* LOCAL */}
-                    <VideoPlayer track={localCameraTrack} label="Tu" />
+                    {/* LOCAL VIDEO */}
+                    <div style={styles.videoCard}>
+                        <LocalUser
+                            key={localCameraTrack?.getTrackId()}
+                            audioTrack={localMicrophoneTrack}
+                            cameraTrack={localCameraTrack}
+                            micOn
+                            cameraOn
+                            style={{ width: "100%", height: "100%" }}
+                        />
+                        <span style={styles.label}>Tu</span>
+                    </div>
 
-                    {/* REMOTE */}
-                    {remoteUsers.map((user) =>
-                        user.videoTrack ? (
-                            <VideoPlayer
-                                key={user.uid}
-                                track={user.videoTrack}
-                                label="Partener"
+                    {/* REMOTE VIDEO + AUDIO */}
+                    {remoteUsers.map((user) => (
+                        <div key={user.uid} style={styles.videoCard}>
+                            <RemoteUser
+                                user={user}
+                                style={{ width: "100%", height: "100%" }}
                             />
-                        ) : (
-                            <div key={user.uid} style={styles.placeholder}>
-                                Camera oprită
-                            </div>
-                        )
-                    )}
+                            <span style={styles.label}>Partener</span>
+                        </div>
+                    ))}
 
                     {remoteUsers.length === 0 && (
-                        <div style={styles.placeholder}>
+                        <div style={styles.placeholderCard}>
                             Așteptăm partenerul...
                         </div>
                     )}
                 </div>
 
-                <button onClick={endCall} style={styles.hangup}>
+                <button onClick={endCall} style={styles.hangupBtn}>
                     Închide apelul
                 </button>
             </div>
@@ -109,28 +117,12 @@ const Call = ({ channelName, onEndCall }) => {
     );
 };
 
-const VideoPlayer = ({ track, label }) => {
-    const ref = useRef(null);
-
-    useEffect(() => {
-        if (track && ref.current) {
-            track.play(ref.current);
-        }
-        return () => track?.stop();
-    }, [track]);
-
-    return (
-        <div ref={ref} style={styles.video}>
-            <span style={styles.label}>{label}</span>
-        </div>
-    );
-};
-
+// ================= STYLES =================
 const styles = {
     overlay: {
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.95)",
+        backgroundColor: "rgba(0,0,0,0.95)",
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
@@ -142,7 +134,6 @@ const styles = {
         alignItems: "center",
         width: "100%",
     },
-    title: { color: "white", marginBottom: 20 },
     grid: {
         display: "flex",
         gap: 20,
@@ -150,13 +141,23 @@ const styles = {
         justifyContent: "center",
         marginBottom: 30,
     },
-    video: {
+    videoCard: {
         width: 320,
         height: 240,
         background: "#000",
         borderRadius: 12,
         position: "relative",
         overflow: "hidden",
+    },
+    placeholderCard: {
+        width: 320,
+        height: 240,
+        background: "#222",
+        color: "#aaa",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: 12,
     },
     label: {
         position: "absolute",
@@ -168,24 +169,15 @@ const styles = {
         borderRadius: 6,
         fontSize: 12,
     },
-    placeholder: {
-        width: 320,
-        height: 240,
-        background: "#222",
-        color: "#aaa",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        borderRadius: 12,
-    },
-    hangup: {
+    hangupBtn: {
         background: "#ff4d4d",
         color: "white",
-        padding: "12px 32px",
+        padding: "12px 30px",
         borderRadius: 30,
         border: "none",
-        fontSize: 16,
         cursor: "pointer",
+        fontSize: 16,
+        fontWeight: "bold",
     },
 };
 

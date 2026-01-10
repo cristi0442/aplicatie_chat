@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import VideoCall from './VideoCall'; // Importam componenta noua
+import VideoCall from './VideoCall';
+import AudioCall from './AudioCall';
 
 function ChatWindow({ socket, username, room, token, baseUrl }) {
     const [currentMessage, setCurrentMessage] = useState("");
     const [messageList, setMessageList] = useState([]);
 
-    // --- STARI NOI PENTRU APEL ---
-    const [inCall, setInCall] = useState(false);
-    const [incomingCall, setIncomingCall] = useState(null); // { callerName, room }
+    // --- STARI PENTRU APEL ---
+    const [callType, setCallType] = useState(null); // 'video' sau 'audio'
+    const [incomingCall, setIncomingCall] = useState(null); // { callerName, room, type }
 
     const fileInputRef = useRef(null);
     const messagesEndRef = useRef(null);
@@ -37,28 +38,29 @@ function ChatWindow({ socket, username, room, token, baseUrl }) {
         fetchHistory();
     }, [room, token, baseUrl]);
 
-    // 2. Socket Events (Mesaje + APELURI)
+    // 2. Socket Events
     useEffect(() => {
         if (!socket) return;
+
         socket.emit("join_room", room);
 
-        // Handler Mesaje
+        // Mesaje
         const msgHandler = (data) => {
             if (String(data.room) === String(room)) {
                 setMessageList((list) => [...list, data]);
             }
         };
 
-        // Handler Primire Apel
+        // Primire Apel
         const callHandler = (data) => {
-            console.log("Apel primit de la:", data.callerName);
-            // Afisam popup-ul doar daca nu suntem deja in apel
+            console.log("APEL PRIMIT:", data);
+            // data.type ar trebui sa fie 'audio' sau 'video' acum
             setIncomingCall(data);
         };
 
-        // Handler Apel Inchis de celalalt
+        // Apel Inchis
         const endCallHandler = () => {
-            setInCall(false);
+            setCallType(null);
             setIncomingCall(null);
         };
 
@@ -85,29 +87,35 @@ function ChatWindow({ socket, username, room, token, baseUrl }) {
         }
     };
 
-    // --- FUNCTII APEL VIDEO ---
+    // --- LOGICA APEL ---
 
-    const startVideoCall = () => {
-        setInCall(true);
-        // Notificam serverul
-        socket.emit("startCall", { room: room, callerName: username });
+    const startCall = (type) => {
+        setCallType(type);
+        // Trimitem 'audio' sau 'video' catre server
+        socket.emit("startCall", {
+            room: room,
+            callerName: username,
+            type: type
+        });
     };
 
     const acceptCall = () => {
-        setInCall(true);
+        // Daca serverul nu trimite type, fallback la video, dar ideal luam din incomingCall
+        const typeToStart = incomingCall.type || 'video';
+        setCallType(typeToStart);
         setIncomingCall(null);
     };
 
     const rejectCall = () => {
         setIncomingCall(null);
+        // Putem emite si un eveniment de reject daca vrem pe viitor
     };
 
-    const endVideoCall = () => {
-        setInCall(false);
+    const endCall = () => {
+        setCallType(null);
         socket.emit("endCall", { room: room });
     };
 
-    // Functia pentru upload imagini (neschimbata)
     const handleFileSelect = (e) => {
         const file = e.target.files[0];
         if (file) {
@@ -125,52 +133,84 @@ function ChatWindow({ socket, username, room, token, baseUrl }) {
         }
     };
 
-    // --- RENDER ---
-
     return (
         <div className="chat-window">
-            {/* HEADER CU BUTON DE APEL */}
             <div className="chat-header" style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
                 <p>Conversație (ID: {room})</p>
 
-                <button
-                    onClick={startVideoCall}
-                    disabled={inCall}
-                    style={{
-                        backgroundColor: '#4ecca3', color: 'white', padding: '8px 15px',
-                        fontSize: '0.9rem', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', gap: '5px'
-                    }}
-                >
-                    📹 Video Call
-                </button>
+                <div style={{display:'flex', gap:'10px'}}>
+                    <button
+                        onClick={() => startCall('audio')}
+                        disabled={!!callType}
+                        style={{
+                            backgroundColor: '#ffa502', color: 'white', padding: '8px 15px',
+                            border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold'
+                        }}
+                    >
+                        📞 Audio
+                    </button>
+
+                    <button
+                        onClick={() => startCall('video')}
+                        disabled={!!callType}
+                        style={{
+                            backgroundColor: '#4ecca3', color: 'white', padding: '8px 15px',
+                            border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold'
+                        }}
+                    >
+                        📹 Video
+                    </button>
+                </div>
             </div>
 
-            {/* POPUP: PRIMESTI APEL */}
-            {incomingCall && !inCall && (
+            {/* --- POPUP NOTIFICARE APEL --- */}
+            {incomingCall && !callType && (
                 <div style={{
-                    position: 'absolute', top: '70px', right: '20px',
-                    backgroundColor: '#2d2d3a', padding: '20px', borderRadius: '12px',
-                    boxShadow: '0 4px 15px rgba(0,0,0,0.5)', zIndex: 500, border: '1px solid #4ecca3'
+                    position: 'absolute', top: '80px', right: '20px',
+                    backgroundColor: '#222', padding: '20px', borderRadius: '12px',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.6)', zIndex: 1000,
+                    border: incomingCall.type === 'audio' ? '2px solid #ffa502' : '2px solid #4ecca3',
+                    minWidth: '250px'
                 }}>
-                    <p style={{marginBottom: '15px', fontSize: '1.1rem'}}>
-                        📞 <strong>{incomingCall.callerName}</strong> te sună!
-                    </p>
+                    <div style={{textAlign: 'center', marginBottom: '15px'}}>
+                        <div style={{fontSize: '2rem', marginBottom: '10px'}}>
+                            {incomingCall.type === 'audio' ? '📞' : '📹'}
+                        </div>
+                        <h4 style={{margin: '0 0 5px 0', color: 'white'}}>
+                            {incomingCall.callerName}
+                        </h4>
+                        <p style={{margin: 0, color: '#ccc', fontSize: '0.9rem'}}>
+                            te sună {incomingCall.type === 'audio' ? '(Audio)' : '(Video)'}...
+                        </p>
+                    </div>
+
                     <div style={{display:'flex', gap:'10px'}}>
-                        <button onClick={acceptCall} style={{backgroundColor: '#4ecca3', flex:1}}>Răspunde</button>
-                        <button onClick={rejectCall} style={{backgroundColor: '#ff4d4d', flex:1}}>Refuză</button>
+                        <button onClick={acceptCall} style={{
+                            flex:1, backgroundColor: '#4ecca3', border:'none',
+                            padding:'10px', borderRadius:'6px', color:'white', cursor:'pointer', fontWeight:'bold'
+                        }}>
+                            Răspunde
+                        </button>
+                        <button onClick={rejectCall} style={{
+                            flex:1, backgroundColor: '#ff4d4d', border:'none',
+                            padding:'10px', borderRadius:'6px', color:'white', cursor:'pointer', fontWeight:'bold'
+                        }}>
+                            Refuză
+                        </button>
                     </div>
                 </div>
             )}
 
-            {/* COMPONENTA VIDEO CALL (cand inCall e true) */}
-            {inCall && (
-                <VideoCall
-                    channelName={String(room)} // Folosim ID-ul camerei ca nume de canal Agora
-                    onEndCall={endVideoCall}
-                />
+            {/* --- COMPONENTELE DE APEL --- */}
+            {callType === 'video' && (
+                <VideoCall channelName={String(room)} onEndCall={endCall} />
             )}
 
-            {/* ZONA DE MESAJE */}
+            {callType === 'audio' && (
+                <AudioCall channelName={String(room)} onEndCall={endCall} />
+            )}
+
+            {/* --- ZONA MESAJE --- */}
             <div className="messages-container">
                 {messageList.map((msg, idx) => {
                     const isMe = msg.author === username;
@@ -186,8 +226,8 @@ function ChatWindow({ socket, username, room, token, baseUrl }) {
                                     <p style={{margin: 0}}>{msg.message}</p>
                                 )}
                                 <span style={{fontSize: '0.7em', opacity: 0.7, display:'block', textAlign: 'right', marginTop: '5px'}}>
-                            {msg.time}
-                        </span>
+                                    {msg.time}
+                                </span>
                             </div>
                         </div>
                     );
@@ -195,14 +235,12 @@ function ChatWindow({ socket, username, room, token, baseUrl }) {
                 <div ref={messagesEndRef} />
             </div>
 
-            {/* ZONA DE INPUT */}
             <div className="message-input-area">
                 <input
                     type="file" style={{display:'none'}} ref={fileInputRef}
                     onChange={handleFileSelect} accept="image/*"
                 />
                 <button className="add-btn" onClick={() => fileInputRef.current.click()}>+</button>
-
                 <input
                     type="text"
                     value={currentMessage}
