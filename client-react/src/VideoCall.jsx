@@ -5,10 +5,11 @@ const APP_ID = "30e5f9ce4cd3419ba8d30fae2c81358f";
 
 const VideoCall = ({ channelName, onEndCall }) => {
     const clientRef = useRef(null);
-    const localTracks = useRef({ mic: null, cam: null });
+    const tracksRef = useRef({ mic: null, cam: null });
     const joined = useRef(false);
     const cleaned = useRef(false);
 
+    const localVideoRef = useRef(null);
     const [remoteUsers, setRemoteUsers] = useState([]);
 
     // ======================
@@ -40,8 +41,13 @@ const VideoCall = ({ channelName, onEndCall }) => {
             const [mic, cam] =
                 await AgoraRTC.createMicrophoneAndCameraTracks();
 
-            localTracks.current = { mic, cam };
+            tracksRef.current = { mic, cam };
             await client.publish([mic, cam]);
+
+            // 🔥 PORNIM CAMERA LOCALĂ AICI (CRITIC)
+            if (localVideoRef.current) {
+                cam.play(localVideoRef.current);
+            }
         };
 
         start();
@@ -67,20 +73,18 @@ const VideoCall = ({ channelName, onEndCall }) => {
             );
         };
 
-        const onUserUnpublished = (user) => {
+        const onUserLeft = (user) => {
             setRemoteUsers((prev) =>
                 prev.filter((u) => u.uid !== user.uid)
             );
         };
 
         client.on("user-published", onUserPublished);
-        client.on("user-unpublished", onUserUnpublished);
-        client.on("user-left", onUserUnpublished);
+        client.on("user-left", onUserLeft);
 
         return () => {
             client.off("user-published", onUserPublished);
-            client.off("user-unpublished", onUserUnpublished);
-            client.off("user-left", onUserUnpublished);
+            client.off("user-left", onUserLeft);
         };
     }, [client]);
 
@@ -94,7 +98,6 @@ const VideoCall = ({ channelName, onEndCall }) => {
             const tryPlay = () => {
                 const el = document.getElementById(`remote-${user.uid}`);
                 if (!el) return false;
-
                 el.setAttribute("playsinline", true);
                 user.videoTrack.play(el);
                 return true;
@@ -115,17 +118,13 @@ const VideoCall = ({ channelName, onEndCall }) => {
         cleaned.current = true;
 
         try {
-            const { mic, cam } = localTracks.current;
-
+            const { mic, cam } = tracksRef.current;
             await client.unpublish([mic, cam].filter(Boolean));
 
-            mic?.stop();
-            mic?.close();
-            cam?.stop();
-            cam?.close();
+            mic?.stop(); mic?.close();
+            cam?.stop(); cam?.close();
 
             client.removeAllListeners();
-
             if (client.connectionState !== "DISCONNECTED") {
                 await client.leave();
             }
@@ -148,14 +147,10 @@ const VideoCall = ({ channelName, onEndCall }) => {
                 <h3 style={{ color: "white" }}>📹 Apel Video</h3>
 
                 <div style={styles.grid}>
-                    {/* LOCAL */}
+                    {/* LOCAL VIDEO */}
                     <div style={styles.videoCard}>
                         <div
-                            ref={(el) => {
-                                if (el && localTracks.current.cam) {
-                                    localTracks.current.cam.play(el);
-                                }
-                            }}
+                            ref={localVideoRef}
                             style={{ width: "100%", height: "100%" }}
                         />
                         <span style={styles.label}>Tu</span>
