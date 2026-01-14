@@ -12,7 +12,7 @@ const VideoCall = ({ channelName, onEndCall }) => {
     const [remoteUsers, setRemoteUsers] = useState([]);
 
     // ======================
-    // 🔹 INIT CLIENT (O SINGURĂ DATĂ)
+    // 🔹 INIT CLIENT
     // ======================
     if (!clientRef.current) {
         clientRef.current = AgoraRTC.createClient({
@@ -35,7 +35,6 @@ const VideoCall = ({ channelName, onEndCall }) => {
                 joinedRef.current = true;
 
                 const uid = Math.floor(Math.random() * 100000);
-
                 await client.join(APP_ID, String(channelName), null, uid);
 
                 if (!mounted) return;
@@ -44,7 +43,6 @@ const VideoCall = ({ channelName, onEndCall }) => {
                     await AgoraRTC.createMicrophoneAndCameraTracks();
 
                 localTracksRef.current = { mic, cam };
-
                 await client.publish([mic, cam]);
             } catch (e) {
                 console.error("Video start error:", e);
@@ -61,19 +59,11 @@ const VideoCall = ({ channelName, onEndCall }) => {
     }, [channelName]);
 
     // ======================
-    // 🔥 REMOTE USERS
+    // 🔹 REMOTE USERS (SUBSCRIBE ONLY)
     // ======================
     useEffect(() => {
         const onUserPublished = async (user, mediaType) => {
             await client.subscribe(user, mediaType);
-
-            if (mediaType === "video") {
-                user.videoTrack.play(`remote-${user.uid}`);
-            }
-
-            if (mediaType === "audio") {
-                user.audioTrack.play();
-            }
 
             setRemoteUsers((prev) =>
                 prev.find((u) => u.uid === user.uid)
@@ -98,7 +88,21 @@ const VideoCall = ({ channelName, onEndCall }) => {
     }, [client]);
 
     // ======================
-    // 🔥 CLEANUP HARD (O SINGURĂ DATĂ)
+    // 🔥 PLAY VIDEO DUPĂ RENDER
+    // ======================
+    useEffect(() => {
+        remoteUsers.forEach((user) => {
+            if (user.videoTrack) {
+                const el = document.getElementById(`remote-${user.uid}`);
+                if (el) {
+                    user.videoTrack.play(el);
+                }
+            }
+        });
+    }, [remoteUsers]);
+
+    // ======================
+    // 🔥 CLEANUP HARD
     // ======================
     const cleanup = async () => {
         if (cleanupRef.current) return;
@@ -126,9 +130,6 @@ const VideoCall = ({ channelName, onEndCall }) => {
         }
     };
 
-    // ======================
-    // 🔹 END CALL
-    // ======================
     const endCall = async () => {
         await cleanup();
         onEndCall();
@@ -148,7 +149,6 @@ const VideoCall = ({ channelName, onEndCall }) => {
                     {/* LOCAL VIDEO */}
                     <div style={styles.videoCard}>
                         <div
-                            id="local-video"
                             style={{ width: "100%", height: "100%" }}
                             ref={(el) => {
                                 const cam = localTracksRef.current.cam;
