@@ -99,7 +99,7 @@ app.get('/my-conversations', authMiddleware, async (req, res) => {
         const result = await pool.query(`
             SELECT c.id AS "conversatieId"
             FROM conversatii c
-            JOIN participanti p ON c.id = p.conversatie_id
+                     JOIN participanti p ON c.id = p.conversatie_id
             WHERE p.utilizator_id = $1
         `, [userId]);
 
@@ -109,7 +109,7 @@ app.get('/my-conversations', authMiddleware, async (req, res) => {
             const parts = await pool.query(`
                 SELECT u.username
                 FROM utilizatori u
-                JOIN participanti p ON u.id = p.utilizator_id
+                         JOIN participanti p ON u.id = p.utilizator_id
                 WHERE p.conversatie_id = $1
             `, [conv.conversatieId]);
 
@@ -123,16 +123,33 @@ app.get('/my-conversations', authMiddleware, async (req, res) => {
     }
 });
 
-// 🔥 ENDPOINT CORECTAT
+// 🔥 START CONVERSATIE DUPA USERNAME (FINAL)
 app.post('/conversations/start', authMiddleware, async (req, res) => {
     const myId = req.user.id;
-    const otherId = Number(req.body.otherUserId);
+    const { username } = req.body;
 
-    if (!otherId)
-        return res.status(400).json({ message: "Lipseste ID user" });
+    if (!username) {
+        return res.status(400).json({ message: "Lipseste username" });
+    }
 
     try {
-        // 1️⃣ verificam daca exista deja conversatia
+        // 1️⃣ cautam utilizatorul
+        const userResult = await pool.query(
+            "SELECT id FROM utilizatori WHERE username = $1",
+            [username]
+        );
+
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({ message: "Utilizator inexistent" });
+        }
+
+        const otherId = userResult.rows[0].id;
+
+        if (otherId === myId) {
+            return res.status(400).json({ message: "Nu poti vorbi cu tine" });
+        }
+
+        // 2️⃣ verificam conversatie existenta
         const existing = await pool.query(`
             SELECT c.id
             FROM conversatii c
@@ -144,13 +161,10 @@ app.post('/conversations/start', authMiddleware, async (req, res) => {
         `, [myId, otherId]);
 
         if (existing.rows.length > 0) {
-            return res.json({
-                conversationId: existing.rows[0].id,
-                alreadyExists: true
-            });
+            return res.json({ conversationId: existing.rows[0].id });
         }
 
-        // 2️⃣ cream conversatia
+        // 3️⃣ cream conversatia
         const newConv = await pool.query(
             "INSERT INTO conversatii (nume_conversatie) VALUES (NULL) RETURNING id"
         );
@@ -162,10 +176,7 @@ app.post('/conversations/start', authMiddleware, async (req, res) => {
             [convId, myId, otherId]
         );
 
-        res.json({
-            conversationId: convId,
-            alreadyExists: false
-        });
+        res.json({ conversationId: convId });
 
     } catch (err) {
         console.error("Conversation Start Error:", err);
@@ -185,7 +196,7 @@ app.get('/messages/:room', authMiddleware, async (req, res) => {
                    u.username AS author,
                    m.trimis_la AS time
             FROM mesaje m
-            JOIN utilizatori u ON m.expeditor_id = u.id
+                JOIN utilizatori u ON m.expeditor_id = u.id
             WHERE m.conversatie_id = $1
             ORDER BY m.trimis_la ASC
         `, [room]);
