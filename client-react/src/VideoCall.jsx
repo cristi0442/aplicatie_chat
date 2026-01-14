@@ -6,14 +6,14 @@ const APP_ID = "30e5f9ce4cd3419ba8d30fae2c81358f";
 const VideoCall = ({ channelName, onEndCall }) => {
     const clientRef = useRef(null);
     const tracksRef = useRef({ mic: null, cam: null });
-    const joined = useRef(false);
-    const cleaned = useRef(false);
+    const joinedRef = useRef(false);
+    const cleanedRef = useRef(false);
 
     const localVideoRef = useRef(null);
     const [remoteUsers, setRemoteUsers] = useState([]);
 
     // ======================
-    // INIT CLIENT
+    // CLIENT SINGLETON
     // ======================
     if (!clientRef.current) {
         clientRef.current = AgoraRTC.createClient({
@@ -24,14 +24,14 @@ const VideoCall = ({ channelName, onEndCall }) => {
     const client = clientRef.current;
 
     // ======================
-    // START CALL
+    // JOIN + PUBLISH
     // ======================
     useEffect(() => {
         let mounted = true;
 
         const start = async () => {
-            if (joined.current) return;
-            joined.current = true;
+            if (joinedRef.current) return;
+            joinedRef.current = true;
 
             const uid = Math.floor(Math.random() * 100000);
             await client.join(APP_ID, String(channelName), null, uid);
@@ -44,7 +44,6 @@ const VideoCall = ({ channelName, onEndCall }) => {
             tracksRef.current = { mic, cam };
             await client.publish([mic, cam]);
 
-            // 🔥 PORNIM CAMERA LOCALĂ AICI (CRITIC)
             if (localVideoRef.current) {
                 cam.play(localVideoRef.current);
             }
@@ -60,17 +59,23 @@ const VideoCall = ({ channelName, onEndCall }) => {
     }, [channelName]);
 
     // ======================
-    // REMOTE USERS
+    // REMOTE USERS (CORE FIX)
     // ======================
     useEffect(() => {
         const onUserPublished = async (user, mediaType) => {
             await client.subscribe(user, mediaType);
 
-            setRemoteUsers((prev) =>
-                prev.find((u) => u.uid === user.uid)
-                    ? prev
-                    : [...prev, user]
-            );
+            // 🔥 adăugăm user-ul DOAR când are videoTrack
+            if (mediaType === "video") {
+                setRemoteUsers((prev) => {
+                    if (prev.find((u) => u.uid === user.uid)) return prev;
+                    return [...prev, user];
+                });
+            }
+
+            if (mediaType === "audio" && user.audioTrack) {
+                user.audioTrack.play();
+            }
         };
 
         const onUserLeft = (user) => {
@@ -89,42 +94,44 @@ const VideoCall = ({ channelName, onEndCall }) => {
     }, [client]);
 
     // ======================
-    // PLAY REMOTE VIDEO (CU RETRY)
+    // PLAY REMOTE VIDEO (RETRY HARD)
     // ======================
     useEffect(() => {
         remoteUsers.forEach((user) => {
-            if (!user.videoTrack) return;
-
-            const tryPlay = () => {
+            const play = () => {
+                if (!user.videoTrack) return false;
                 const el = document.getElementById(`remote-${user.uid}`);
                 if (!el) return false;
-                el.setAttribute("playsinline", true);
                 user.videoTrack.play(el);
                 return true;
             };
 
-            if (!tryPlay()) {
-                setTimeout(() => tryPlay(), 200);
-                setTimeout(() => tryPlay(), 600);
+            if (!play()) {
+                setTimeout(play, 200);
+                setTimeout(play, 600);
+                setTimeout(play, 1200);
             }
         });
     }, [remoteUsers]);
 
     // ======================
-    // CLEANUP HARD
+    // CLEANUP HARD (NO GHOSTS)
     // ======================
     const cleanup = async () => {
-        if (cleaned.current) return;
-        cleaned.current = true;
+        if (cleanedRef.current) return;
+        cleanedRef.current = true;
 
         try {
             const { mic, cam } = tracksRef.current;
             await client.unpublish([mic, cam].filter(Boolean));
 
-            mic?.stop(); mic?.close();
-            cam?.stop(); cam?.close();
+            mic?.stop();
+            mic?.close();
+            cam?.stop();
+            cam?.close();
 
             client.removeAllListeners();
+
             if (client.connectionState !== "DISCONNECTED") {
                 await client.leave();
             }
@@ -147,7 +154,7 @@ const VideoCall = ({ channelName, onEndCall }) => {
                 <h3 style={{ color: "white" }}>📹 Apel Video</h3>
 
                 <div style={styles.grid}>
-                    {/* LOCAL VIDEO */}
+                    {/* LOCAL */}
                     <div style={styles.videoCard}>
                         <div
                             ref={localVideoRef}
