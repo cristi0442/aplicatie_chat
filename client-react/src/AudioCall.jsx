@@ -1,88 +1,72 @@
-import React, { useEffect, useState, useRef } from "react";
-import {
-    AgoraRTCProvider,
-    useRTCClient,
-    useRemoteUsers,
-} from "agora-rtc-react";
+import React, { useEffect, useRef, useState } from "react";
 import AgoraRTC from "agora-rtc-sdk-ng";
 
 const APP_ID = "30e5f9ce4cd3419ba8d30fae2c81358f";
 
-export const AudioCall = ({ channelName, onEndCall }) => {
-    // 🔒 client PERSISTENT (nu se recreează)
-    const client = useRTCClient(
-        AgoraRTC.createClient({ codec: "vp8", mode: "rtc" })
-    );
+const AudioCall = ({ channelName, onEndCall }) => {
+    const clientRef = useRef(null);
+    const localTrackRef = useRef(null);
+    const joinedRef = useRef(false);
+    const cleanupRef = useRef(false);
 
-    return (
-        <AgoraRTCProvider client={client}>
-            <CallLogic channelName={channelName} onEndCall={onEndCall} />
-        </AgoraRTCProvider>
-    );
-};
-
-const CallLogic = ({ channelName, onEndCall }) => {
-    const client = useRTCClient();
-    const remoteUsers = useRemoteUsers();
-
-    const [localMicTrack, setLocalMicTrack] = useState(null);
+    const [status, setStatus] = useState("Inițializare...");
     const [micOn, setMicOn] = useState(true);
     const [volume, setVolume] = useState(0);
-    const [status, setStatus] = useState("Inițializare...");
-
-    const isConnecting = useRef(false);
-    const hasLeft = useRef(false); // 🔥 prevenim leave dublu
+    const [remoteUsers, setRemoteUsers] = useState([]);
 
     // ======================
-    // 🔹 START APEL
+    // 🔹 INIT CLIENT (O SINGURĂ DATĂ)
+    // ======================
+    if (!clientRef.current) {
+        clientRef.current = AgoraRTC.createClient({
+            mode: "rtc",
+            codec: "vp8",
+        });
+    }
+
+    const client = clientRef.current;
+
+    // ======================
+    // 🔹 START CALL
     // ======================
     useEffect(() => {
         let mounted = true;
 
-        const startCall = async () => {
-            if (
-                isConnecting.current ||
-                client.connectionState !== "DISCONNECTED"
-            ) {
-                return;
-            }
-
-            isConnecting.current = true;
-
+        const start = async () => {
             try {
-                const uid = Math.floor(Math.random() * 9000) + 100;
+                if (joinedRef.current) return;
+                joinedRef.current = true;
+
                 setStatus("Conectare Agora...");
 
+                const uid = Math.floor(Math.random() * 100000);
                 await client.join(APP_ID, String(channelName), null, uid);
+
                 if (!mounted) return;
 
                 setStatus("Pornire microfon...");
                 const micTrack = await AgoraRTC.createMicrophoneAudioTrack();
+                localTrackRef.current = micTrack;
 
-                if (!mounted) {
-                    micTrack.close();
-                    return;
-                }
-
-                setLocalMicTrack(micTrack);
                 await client.publish([micTrack]);
-
                 setStatus("✅ Conectat! Vorbește.");
-            } catch (err) {
-                if (err.code !== "OPERATION_ABORTED") {
-                    console.error("Agora error:", err);
-                    setStatus("Eroare Agora");
-                }
-            } finally {
-                isConnecting.current = false;
+
+                // 🔊 volum meter
+                const interval = setInterval(() => {
+                    if (micTrack) {
+                        setVolume(micTrack.getVolumeLevel() * 100);
+                    }
+                }, 100);
+
+                micTrack._volumeInterval = interval;
+            } catch (e) {
+                console.error("Agora start error:", e);
+                setStatus("Eroare Agora");
             }
         };
 
-        startCall();
+        start();
 
-        // ======================
-        // 🔥 CLEANUP AUTOMAT (STRICT MODE SAFE)
-        // ======================
         return () => {
             mounted = false;
             cleanup();
@@ -91,73 +75,85 @@ const CallLogic = ({ channelName, onEndCall }) => {
     }, [channelName]);
 
     // ======================
-    // 🔥 CLEANUP REAL (O SINGURĂ DATĂ)
+    // 🔥 SUBSCRIBE / UNSUBSCRIBE
+    // ======================
+    useEffect(() => {
+        const onUserPublished = async (user, mediaType) => {
+            await client.subscribe(user, mediaType);
+            if (mediaType === "audio") {
+                user.audioTrack.play();
+            }
+            setRemoteUsers((prev) =>
+                prev.find((u) => u.uid === user.uid)
+                    ? prev
+                    : [...prev, user]
+            );
+        };
+
+        const onUserLeft = (user) => {
+            setRemoteUsers((prev) =>
+                prev.filter((u) => u.uid !== user.uid)
+            );
+        };
+
+        client.on("user-published", onUserPublished);
+        client.on("user-left", onUserLeft);
+
+        return () => {
+            client.off("user-published", onUserPublished);
+            client.off("user-left", onUserLeft);
+        };
+    }, [client]);
+
+    // ======================
+    // 🔥 CLEANUP HARD (O SINGURĂ DATĂ)
     // ======================
     const cleanup = async () => {
-        if (hasLeft.current) return;
-        hasLeft.current = true;
+        if (cleanupRef.current) return;
+        cleanupRef.current = true;
 
         try {
-            if (localMicTrack) {
-                localMicTrack.stop();
-                localMicTrack.close();
+            const track = localTrackRef.current;
+            if (track) {
+                clearInterval(track._volumeInterval);
+                await client.unpublish([track]);
+                track.stop();
+                track.close();
             }
+
+            client.removeAllListeners();
 
             if (client.connectionState !== "DISCONNECTED") {
                 await client.leave();
             }
         } catch (e) {
-            console.error("Cleanup error:", e);
+            console.warn("Cleanup warning:", e);
         }
     };
 
     // ======================
-    // 🔹 HANGUP MANUAL
+    // 🔹 CONTROLS
     // ======================
-    const handleHangup = async () => {
+    const toggleMic = async () => {
+        const track = localTrackRef.current;
+        if (!track) return;
+        await track.setEnabled(!micOn);
+        setMicOn(!micOn);
+    };
+
+    const hangup = async () => {
         await cleanup();
         onEndCall();
     };
 
     // ======================
-    // 🔹 VOLUM MICROFON
+    // 🔹 UI
     // ======================
-    useEffect(() => {
-        if (!localMicTrack) return;
-        const t = setInterval(() => {
-            setVolume(localMicTrack.getVolumeLevel() * 100);
-        }, 100);
-        return () => clearInterval(t);
-    }, [localMicTrack]);
-
-    const toggleMic = async () => {
-        if (!localMicTrack) return;
-        await localMicTrack.setEnabled(!micOn);
-        setMicOn(!micOn);
-    };
-
-    // ======================
-    // 🔹 SUBSCRIBE PARTENER
-    // ======================
-    useEffect(() => {
-        const onPublish = async (user, mediaType) => {
-            await client.subscribe(user, mediaType);
-            if (mediaType === "audio") {
-                user.audioTrack.play();
-            }
-        };
-
-        client.on("user-published", onPublish);
-        return () => client.off("user-published", onPublish);
-    }, [client]);
-
     return (
         <div style={styles.overlay}>
             <div style={styles.container}>
                 <h2 style={{ color: "white" }}>📞 Apel Audio</h2>
-                <p style={{ color: "#4ecca3", marginBottom: "30px" }}>
-                    Status: {status}
-                </p>
+                <p style={{ color: "#4ecca3" }}>Status: {status}</p>
 
                 <div style={styles.grid}>
                     <div style={styles.audioCard}>
@@ -168,8 +164,8 @@ const CallLogic = ({ channelName, onEndCall }) => {
                             <div
                                 style={{
                                     width: `${Math.min(volume * 2, 100)}%`,
-                                    background: micOn ? "#4ecca3" : "red",
                                     height: "100%",
+                                    background: micOn ? "#4ecca3" : "red",
                                 }}
                             />
                         </div>
@@ -207,7 +203,7 @@ const CallLogic = ({ channelName, onEndCall }) => {
                         {micOn ? "Mute" : "Unmute"}
                     </button>
                     <button
-                        onClick={handleHangup}
+                        onClick={hangup}
                         style={{ ...styles.btn, background: "#ff4d4d" }}
                     >
                         Închide
@@ -231,10 +227,10 @@ const styles = {
     container: { textAlign: "center", width: "100%" },
     grid: {
         display: "flex",
-        gap: "20px",
+        gap: 20,
         justifyContent: "center",
         flexWrap: "wrap",
-        marginBottom: "40px",
+        marginBottom: 40,
     },
     audioCard: {
         width: 160,
