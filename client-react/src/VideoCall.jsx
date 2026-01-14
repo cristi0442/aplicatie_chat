@@ -5,14 +5,14 @@ const APP_ID = "30e5f9ce4cd3419ba8d30fae2c81358f";
 
 const VideoCall = ({ channelName, onEndCall }) => {
     const clientRef = useRef(null);
-    const localTracksRef = useRef({ mic: null, cam: null });
-    const joinedRef = useRef(false);
-    const cleanupRef = useRef(false);
+    const localTracks = useRef({ mic: null, cam: null });
+    const joined = useRef(false);
+    const cleaned = useRef(false);
 
     const [remoteUsers, setRemoteUsers] = useState([]);
 
     // ======================
-    // 🔹 INIT CLIENT
+    // INIT CLIENT
     // ======================
     if (!clientRef.current) {
         clientRef.current = AgoraRTC.createClient({
@@ -20,33 +20,28 @@ const VideoCall = ({ channelName, onEndCall }) => {
             codec: "vp8",
         });
     }
-
     const client = clientRef.current;
 
     // ======================
-    // 🔹 START CALL
+    // START CALL
     // ======================
     useEffect(() => {
         let mounted = true;
 
         const start = async () => {
-            try {
-                if (joinedRef.current) return;
-                joinedRef.current = true;
+            if (joined.current) return;
+            joined.current = true;
 
-                const uid = Math.floor(Math.random() * 100000);
-                await client.join(APP_ID, String(channelName), null, uid);
+            const uid = Math.floor(Math.random() * 100000);
+            await client.join(APP_ID, String(channelName), null, uid);
 
-                if (!mounted) return;
+            if (!mounted) return;
 
-                const [mic, cam] =
-                    await AgoraRTC.createMicrophoneAndCameraTracks();
+            const [mic, cam] =
+                await AgoraRTC.createMicrophoneAndCameraTracks();
 
-                localTracksRef.current = { mic, cam };
-                await client.publish([mic, cam]);
-            } catch (e) {
-                console.error("Video start error:", e);
-            }
+            localTracks.current = { mic, cam };
+            await client.publish([mic, cam]);
         };
 
         start();
@@ -55,11 +50,11 @@ const VideoCall = ({ channelName, onEndCall }) => {
             mounted = false;
             cleanup();
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line
     }, [channelName]);
 
     // ======================
-    // 🔹 REMOTE USERS (SUBSCRIBE ONLY)
+    // REMOTE USERS
     // ======================
     useEffect(() => {
         const onUserPublished = async (user, mediaType) => {
@@ -72,48 +67,57 @@ const VideoCall = ({ channelName, onEndCall }) => {
             );
         };
 
-        const onUserLeft = (user) => {
+        const onUserUnpublished = (user) => {
             setRemoteUsers((prev) =>
                 prev.filter((u) => u.uid !== user.uid)
             );
         };
 
         client.on("user-published", onUserPublished);
-        client.on("user-left", onUserLeft);
+        client.on("user-unpublished", onUserUnpublished);
+        client.on("user-left", onUserUnpublished);
 
         return () => {
             client.off("user-published", onUserPublished);
-            client.off("user-left", onUserLeft);
+            client.off("user-unpublished", onUserUnpublished);
+            client.off("user-left", onUserUnpublished);
         };
     }, [client]);
 
     // ======================
-    // 🔥 PLAY VIDEO DUPĂ RENDER
+    // PLAY REMOTE VIDEO (CU RETRY)
     // ======================
     useEffect(() => {
         remoteUsers.forEach((user) => {
-            if (user.videoTrack) {
+            if (!user.videoTrack) return;
+
+            const tryPlay = () => {
                 const el = document.getElementById(`remote-${user.uid}`);
-                if (el) {
-                    user.videoTrack.play(el);
-                }
+                if (!el) return false;
+
+                el.setAttribute("playsinline", true);
+                user.videoTrack.play(el);
+                return true;
+            };
+
+            if (!tryPlay()) {
+                setTimeout(() => tryPlay(), 200);
+                setTimeout(() => tryPlay(), 600);
             }
         });
     }, [remoteUsers]);
 
     // ======================
-    // 🔥 CLEANUP HARD
+    // CLEANUP HARD
     // ======================
     const cleanup = async () => {
-        if (cleanupRef.current) return;
-        cleanupRef.current = true;
+        if (cleaned.current) return;
+        cleaned.current = true;
 
         try {
-            const { mic, cam } = localTracksRef.current;
+            const { mic, cam } = localTracks.current;
 
-            if (mic || cam) {
-                await client.unpublish([mic, cam].filter(Boolean));
-            }
+            await client.unpublish([mic, cam].filter(Boolean));
 
             mic?.stop();
             mic?.close();
@@ -126,7 +130,7 @@ const VideoCall = ({ channelName, onEndCall }) => {
                 await client.leave();
             }
         } catch (e) {
-            console.warn("Video cleanup warning:", e);
+            console.warn("cleanup warning", e);
         }
     };
 
@@ -136,29 +140,28 @@ const VideoCall = ({ channelName, onEndCall }) => {
     };
 
     // ======================
-    // 🔹 UI
+    // UI
     // ======================
     return (
         <div style={styles.overlay}>
             <div style={styles.container}>
-                <h3 style={{ color: "white", marginBottom: 15 }}>
-                    📹 Apel Video
-                </h3>
+                <h3 style={{ color: "white" }}>📹 Apel Video</h3>
 
                 <div style={styles.grid}>
-                    {/* LOCAL VIDEO */}
+                    {/* LOCAL */}
                     <div style={styles.videoCard}>
                         <div
-                            style={{ width: "100%", height: "100%" }}
                             ref={(el) => {
-                                const cam = localTracksRef.current.cam;
-                                if (el && cam) cam.play(el);
+                                if (el && localTracks.current.cam) {
+                                    localTracks.current.cam.play(el);
+                                }
                             }}
+                            style={{ width: "100%", height: "100%" }}
                         />
                         <span style={styles.label}>Tu</span>
                     </div>
 
-                    {/* REMOTE USERS */}
+                    {/* REMOTE */}
                     {remoteUsers.map((u) => (
                         <div key={u.uid} style={styles.videoCard}>
                             <div
@@ -170,13 +173,13 @@ const VideoCall = ({ channelName, onEndCall }) => {
                     ))}
 
                     {remoteUsers.length === 0 && (
-                        <div style={styles.placeholderCard}>
+                        <div style={styles.placeholder}>
                             Așteptăm partenerul...
                         </div>
                     )}
                 </div>
 
-                <button onClick={endCall} style={styles.hangupBtn}>
+                <button onClick={endCall} style={styles.hangup}>
                     Închide apelul
                 </button>
             </div>
@@ -188,7 +191,7 @@ const styles = {
     overlay: {
         position: "fixed",
         inset: 0,
-        backgroundColor: "rgba(0,0,0,0.95)",
+        background: "rgba(0,0,0,0.95)",
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
@@ -215,7 +218,7 @@ const styles = {
         position: "relative",
         overflow: "hidden",
     },
-    placeholderCard: {
+    placeholder: {
         width: 320,
         height: 240,
         background: "#222",
@@ -235,14 +238,13 @@ const styles = {
         borderRadius: 6,
         fontSize: 12,
     },
-    hangupBtn: {
+    hangup: {
         background: "#ff4d4d",
         color: "white",
         padding: "12px 30px",
         borderRadius: 30,
         border: "none",
         cursor: "pointer",
-        fontSize: 16,
         fontWeight: "bold",
     },
 };
