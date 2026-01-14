@@ -4,6 +4,7 @@ function ConversationList({ socket, token, currentUser, joinRoom, baseUrl }) {
     const [conversations, setConversations] = useState([]);
     const [usernameInput, setUsernameInput] = useState("");
 
+    // 🔹 Fetch conversații
     const fetchConversations = async () => {
         try {
             const response = await fetch(`${baseUrl}/my-conversations`, {
@@ -22,6 +23,7 @@ function ConversationList({ socket, token, currentUser, joinRoom, baseUrl }) {
         if (token) fetchConversations();
     }, [token, baseUrl]);
 
+    // 🔹 Start chat după USERNAME
     const startNewChat = async () => {
         if (!usernameInput.trim()) return;
 
@@ -39,7 +41,13 @@ function ConversationList({ socket, token, currentUser, joinRoom, baseUrl }) {
 
             if (response.ok) {
                 fetchConversations();
-                joinRoom(data.conversationId);
+
+                // ⚠️ trimitem ID + nume către App
+                joinRoom({
+                    id: data.conversationId,
+                    name: usernameInput.trim()
+                });
+
                 if (socket) socket.emit('join_room', data.conversationId);
                 setUsernameInput("");
             } else {
@@ -52,6 +60,7 @@ function ConversationList({ socket, token, currentUser, joinRoom, baseUrl }) {
 
     return (
         <div className="list-section">
+            {/* 🔹 Căutare după username */}
             <div style={{ display: 'flex', gap: '5px', marginBottom: '15px' }}>
                 <input
                     type="text"
@@ -76,12 +85,20 @@ function ConversationList({ socket, token, currentUser, joinRoom, baseUrl }) {
                     const partener = convo.participanti.find(
                         p => p.username !== currentUser?.username
                     );
+
+                    const numeAfisat = partener?.username || "Chat necunoscut";
+
                     return (
                         <li
                             key={convo.conversatieId}
-                            onClick={() => joinRoom(convo.conversatieId)}
+                            onClick={() =>
+                                joinRoom({
+                                    id: convo.conversatieId,
+                                    name: numeAfisat
+                                })
+                            }
                         >
-                            <strong>{partener?.username || "Chat necunoscut"}</strong>
+                            <strong>{numeAfisat}</strong>
                         </li>
                     );
                 })}

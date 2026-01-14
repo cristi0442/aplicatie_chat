@@ -11,11 +11,16 @@ const SERVER_URL = "https://aplicatie-chat.onrender.com";
 function App() {
     const [user, setUser] = useState(null);
     const [token, setToken] = useState(null);
+
+    // 🔥 currentRoom = { id, name }
     const [currentRoom, setCurrentRoom] = useState(null);
+
     const [socket, setSocket] = useState(null);
     const [onlineUsers, setOnlineUsers] = useState({});
 
-    // 🔹 Auto-login din localStorage
+    // ======================
+    // 🔹 AUTO LOGIN
+    // ======================
     useEffect(() => {
         const storedUser = localStorage.getItem('chat_user');
         const storedToken = localStorage.getItem('chat_token');
@@ -42,7 +47,9 @@ function App() {
         setCurrentRoom(null);
     };
 
-    // 🔹 Conectare Socket.IO
+    // ======================
+    // 🔹 SOCKET.IO
+    // ======================
     useEffect(() => {
         if (user && token) {
             const newSocket = io(SERVER_URL, {
@@ -64,7 +71,9 @@ function App() {
         }
     }, [user, token]);
 
-    // 🔥 START CHAT CU UTILIZATOR ONLINE
+    // ======================
+    // 🔥 START CHAT DIN ONLINE USERS
+    // ======================
     const startChatWithUser = async (otherUserId) => {
         try {
             const response = await fetch(`${SERVER_URL}/conversations/start`, {
@@ -76,29 +85,37 @@ function App() {
                 body: JSON.stringify({ otherUserId })
             });
 
+            const data = await response.json();
+
             if (response.ok) {
-                const data = await response.json();
+                const username = onlineUsers[otherUserId] || "Chat";
 
-                // setăm conversația curentă
-                setCurrentRoom(data.conversationId);
+                setCurrentRoom({
+                    id: data.conversationId,
+                    name: username
+                });
 
-                // intrăm în room prin socket
                 if (socket) {
                     socket.emit("join_room", data.conversationId);
                 }
             } else {
-                alert("Nu s-a putut crea conversația.");
+                alert(data.message || "Nu s-a putut crea conversația.");
             }
         } catch (err) {
             console.error("Eroare startChat:", err);
         }
     };
 
-    // 🔹 Dacă nu e logat
+    // ======================
+    // 🔹 NU ESTE LOGAT
+    // ======================
     if (!user) {
         return <AuthPage onLoginSuccess={handleLoginSuccess} baseUrl={SERVER_URL} />;
     }
 
+    // ======================
+    // 🔹 UI
+    // ======================
     return (
         <div className="app-layout">
             <div className="sidebar">
@@ -112,7 +129,7 @@ function App() {
                     </button>
                 </div>
 
-                {/* Conversații existente */}
+                {/* Conversații */}
                 <ConversationList
                     socket={socket}
                     token={token}
@@ -121,7 +138,7 @@ function App() {
                     baseUrl={SERVER_URL}
                 />
 
-                {/* Utilizatori online CLICKABIL */}
+                {/* Utilizatori online */}
                 <div
                     className="list-section"
                     style={{
@@ -144,7 +161,8 @@ function App() {
                     <ChatWindow
                         socket={socket}
                         username={user.username}
-                        room={currentRoom}
+                        room={currentRoom.id}
+                        roomName={currentRoom.name}
                         token={token}
                         baseUrl={SERVER_URL}
                     />
