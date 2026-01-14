@@ -61,6 +61,7 @@ function App() {
             setSocket(newSocket);
 
             newSocket.on('updateOnlineUsers', (users) => {
+                // users = { userId: username }
                 setOnlineUsers(users);
             });
 
@@ -72,9 +73,11 @@ function App() {
     }, [user, token]);
 
     // ======================
-    // 🔥 START CHAT DIN ONLINE USERS
+    // 🔥 START CHAT DIN ONLINE USERS (USERNAME)
     // ======================
-    const startChatWithUser = async (otherUserId) => {
+    const startChatWithUser = async (username) => {
+        if (!username) return;
+
         try {
             const response = await fetch(`${SERVER_URL}/conversations/start`, {
                 method: "POST",
@@ -82,14 +85,12 @@ function App() {
                     "Content-Type": "application/json",
                     "Authorization": `Bearer ${token}`
                 },
-                body: JSON.stringify({ otherUserId })
+                body: JSON.stringify({ username })
             });
 
             const data = await response.json();
 
             if (response.ok) {
-                const username = onlineUsers[otherUserId] || "Chat";
-
                 setCurrentRoom({
                     id: data.conversationId,
                     name: username
@@ -147,11 +148,10 @@ function App() {
                         borderTop: '1px solid var(--border-color)'
                     }}
                 >
-                    <h3>Utilizatori Online</h3>
                     <OnlineUsers
                         onlineUsers={onlineUsers}
                         myUserId={user.id}
-                        onSelectUser={startChatWithUser}
+                        onSelectUser={startChatWithUser} // 🔥 primește USERNAME
                     />
                 </div>
             </div>
