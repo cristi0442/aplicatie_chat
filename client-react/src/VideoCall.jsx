@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import {
     AgoraRTCProvider,
     useJoin,
@@ -30,8 +30,9 @@ export const VideoCall = ({ channelName, onEndCall }) => {
 // ================= CALL =================
 const Call = ({ channelName, onEndCall }) => {
     const client = useRTCClient();
+    const hasLeft = useRef(false); // 🔥 prevenim leave dublu
 
-    // 1️⃣ JOIN (fără uid → evităm INVALID_PARAMS)
+    // 1️⃣ JOIN
     const { isConnected } = useJoin({
         appid: APP_ID,
         channel: channelName,
@@ -49,24 +50,40 @@ const Call = ({ channelName, onEndCall }) => {
 
     const remoteUsers = useRemoteUsers();
 
-    // 🔥 FIX CRITIC: SUBSCRIBE MANUAL DOAR LA VIDEO REMOTE
-    useEffect(() => {
-        if (!client) return;
+    // ======================
+    // 🔹 CLEANUP COMPLET (STRICT MODE SAFE)
+    // ======================
+    const cleanup = async () => {
+        if (hasLeft.current) return;
+        hasLeft.current = true;
 
-        remoteUsers.forEach(async (user) => {
-            if (user.hasVideo && !user.videoTrack) {
-                await client.subscribe(user, "video");
+        try {
+            localCameraTrack?.stop();
+            localCameraTrack?.close();
+            localMicrophoneTrack?.stop();
+            localMicrophoneTrack?.close();
+
+            if (client.connectionState !== "DISCONNECTED") {
+                await client.leave();
             }
-        });
-    }, [remoteUsers, client]);
+        } catch (e) {
+            console.error("Video cleanup error:", e);
+        }
+    };
 
-    // 4️⃣ CLEANUP
+    // 🔥 cleanup automat la unmount
+    useEffect(() => {
+        return () => {
+            cleanup();
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // ======================
+    // 🔹 END CALL MANUAL
+    // ======================
     const endCall = async () => {
-        localCameraTrack?.stop();
-        localCameraTrack?.close();
-        localMicrophoneTrack?.stop();
-        localMicrophoneTrack?.close();
-        await client.leave();
+        await cleanup();
         onEndCall();
     };
 
@@ -74,14 +91,13 @@ const Call = ({ channelName, onEndCall }) => {
         <div style={styles.overlay}>
             <div style={styles.container}>
                 <h3 style={{ color: "white", marginBottom: 15 }}>
-                    În apel: {channelName}
+                    📹 Apel Video
                 </h3>
 
                 <div style={styles.grid}>
                     {/* LOCAL VIDEO */}
                     <div style={styles.videoCard}>
                         <LocalUser
-                            key={localCameraTrack?.getTrackId()}
                             audioTrack={localMicrophoneTrack}
                             cameraTrack={localCameraTrack}
                             micOn
@@ -91,7 +107,7 @@ const Call = ({ channelName, onEndCall }) => {
                         <span style={styles.label}>Tu</span>
                     </div>
 
-                    {/* REMOTE VIDEO + AUDIO */}
+                    {/* REMOTE USERS */}
                     {remoteUsers.map((user) => (
                         <div key={user.uid} style={styles.videoCard}>
                             <RemoteUser
