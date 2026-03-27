@@ -6,7 +6,7 @@ This project is a full-stack real-time messaging application inspired by **Whats
 
 The application is deployed and accessible online — frontend hosted on **Vercel**, backend on **Render**.
 
-🔗 **Live demo:** [aplicatiechat.vercel.app](https://aplicatiechat.vercel.app/)
+🔗 **Live demo:** [aplicatiechat.vercel.app](https://aplicatie-chat.vercel.app/)
 
 ---
 
